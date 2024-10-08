@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram import ReplyKeyboardMarkup
+from telegram import ParseMode
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -208,41 +209,6 @@ async def prompt_for_extras(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Логирование для отладки
     logger.info(f"Пользователю {update.message.from_user.id} предложены дополнительные услуги.")
 
-async def complete_calculation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Получаем общую стоимость заказа из данных пользователя
-    total_cost = context.user_data.get('total_cost', 0)
-    selected_extras = context.user_data.get('selected_extras', [])
-
-    # Формируем сообщение с итоговой стоимостью
-    final_message = f"Итоговая стоимость услуг: {total_cost:.2f} руб."
-
-    if selected_extras:
-        # Если есть дополнительные услуги, добавляем их в сообщение
-        extras_list = ", ".join(selected_extras)
-        final_message += f"\nВы выбрали следующие дополнительные услуги: {extras_list}"
-
-    # Отправляем сообщение с итоговой стоимостью
-    await update.message.reply_text(final_message)
-
-    # Формируем inline-кнопки для завершения заказа
-    buttons = [
-        [InlineKeyboardButton("Связаться📞", url="https://t.me/your_contact")],
-        [InlineKeyboardButton("WhatsApp", url="https://wa.me/your_number")],
-        [InlineKeyboardButton("Показать номер телефона", callback_data="show_phone_number")]
-    ]
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    # Отправляем сообщение с кнопками для связи
-    await send_inline_message(update, context, "Чтобы завершить заказ, свяжитесь с нами через Telegram или WhatsApp:",
-                              buttons)
-
-    # Логируем завершение расчета
-    logger.info(
-        f"Расчет завершен для пользователя {update.message.from_user.id} с итоговой стоимостью: {total_cost:.2f} руб.")
-
-    # Сбрасываем состояние пользователя на главное меню
-    context.user_data['state'] = 'main_menu'
-
 async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, user_state: str) -> None:
     # Получаем список отзывов, которые находятся на модерации
     pending_reviews = context.application.bot_data.get('reviews', [])
@@ -278,4 +244,131 @@ async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, u
 
     # Логирование для отладки
     logger.info(f"Администратор {update.message.from_user.id} просматривает отзывы для модерации.")
-смии
+
+async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
+    # ID канала, куда будут публиковаться отзывы (замените на реальный ID канала)
+    review_channel_id = "@your_review_channel"
+
+    # Получаем информацию из отзыва
+    user_name = review.get('user_name', 'Анонимный пользователь')
+    review_text = review.get('review', 'Без текста')
+
+    # Формируем сообщение для публикации
+    review_message = f"<b>Отзыв от {user_name}:</b>\n\n{review_text}"
+
+    # Отправляем сообщение в канал с отзывами (включаем поддержку HTML разметки)
+    await context.bot.send_message(
+        chat_id=review_channel_id,
+        text=review_message,
+        parse_mode=ParseMode.HTML  # Используем HTML для форматирования текста
+    )
+
+    # Логируем успешную публикацию
+    logger.info(f"Отзыв от {user_name} опубликован в канале {review_channel_id}.")
+
+    # Обновляем статус отзыва как "опубликованный"
+    review['approved'] = True
+
+def calculate_windows(price_per_panel: float, num_panels: int) -> dict:
+
+    # Рассчитываем общую стоимость
+    total_cost = price_per_panel * num_panels
+
+    # Проверяем минимальную стоимость (например, 1000 руб.)
+    minimum_cost = 1000  # Минимальная стоимость услуги
+    if total_cost < minimum_cost:
+        total_cost = minimum_cost
+
+    # Формируем отформатированное сообщение для пользователя
+    formatted_message = (
+        f"Вы выбрали мойку {num_panels} оконных створок.\n"
+        f"Стоимость за одну створку: {price_per_panel:.2f} руб.\n"
+        f"Итоговая стоимость мойки: {total_cost:.2f} руб."
+    )
+
+    # Возвращаем результат в виде словаря
+    return {
+        'total_cost': total_cost,
+        'formatted_message': formatted_message
+    }
+
+async def complete_calculation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Получаем общую стоимость заказа из данных пользователя
+    total_cost = context.user_data.get('total_cost', 0)
+    selected_extras = context.user_data.get('selected_extras', [])
+
+    # Формируем сообщение с итоговой стоимостью
+    final_message = f"Итоговая стоимость услуг: {total_cost:.2f} руб."
+
+    if selected_extras:
+        # Если есть дополнительные услуги, добавляем их в сообщение
+        extras_list = ", ".join(selected_extras)
+        final_message += f"\nВы выбрали следующие дополнительные услуги: {extras_list}"
+
+    # Отправляем сообщение с итоговой стоимостью
+    await update.message.reply_text(final_message)
+
+    # Формируем inline-кнопки для завершения заказа
+    buttons = [
+        [InlineKeyboardButton("Связаться📞", url="https://t.me/your_contact")],
+        [InlineKeyboardButton("WhatsApp", url="https://wa.me/your_number")],
+        [InlineKeyboardButton("Показать номер телефона", callback_data="show_phone_number")]
+    ]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    # Отправляем сообщение с кнопками для связи
+    await send_inline_message(update, context, "Чтобы завершить заказ, свяжитесь с нами через Telegram или WhatsApp:",
+                              buttons)
+
+    # Логируем завершение расчета
+    logger.info(
+        f"Расчет завершен для пользователя {update.message.from_user.id} с итоговой стоимостью: {total_cost:.2f} руб.")
+
+    # Сбрасываем состояние пользователя на главное меню
+    context.user_data['state'] = 'main_menu'
+
+async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options: list) -> None:
+    """
+    Отправляет сообщение пользователю с кнопками.
+
+    :param update: Update - объект, представляющий обновление от Telegram API.
+    :param context: ContextTypes.DEFAULT_TYPE - объект контекста, предоставляющий информацию о состоянии бота и пользователя.
+    :param message: str - текст сообщения, которое будет отправлено пользователю.
+    :param options: list - список вариантов кнопок для ответа пользователя.
+    """
+    # Создаем клавиатуру с кнопками на основе переданных опций
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard=[[option] for option in options],  # Преобразуем каждый элемент списка в строку кнопок
+        resize_keyboard=True,  # Изменяет размер клавиатуры для более компактного отображения
+        one_time_keyboard=True  # Клавиатура исчезает после нажатия
+    )
+
+    # Отправляем сообщение с кнопками
+    await update.message.reply_text(
+        text=message,
+        reply_markup=reply_markup
+    )
+
+    # Логирование отправленного сообщения для отладки
+    logger.info(f"Сообщение отправлено пользователю {update.message.from_user.id}: '{message}'")
+
+async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, buttons: list) -> None:
+    """
+    Отправляет сообщение с inline-кнопками пользователю.
+
+    :param update: Update - объект, представляющий обновление от Telegram API.
+    :param context: ContextTypes.DEFAULT_TYPE - объект контекста, предоставляющий информацию о состоянии бота и пользователя.
+    :param message: str - текст сообщения, которое будет отправлено пользователю.
+    :param buttons: list - список inline-кнопок для взаимодействия пользователя.
+    """
+    # Создаем разметку с inline-кнопками
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    # Отправляем сообщение с inline-кнопками
+    await update.message.reply_text(
+        text=message,
+        reply_markup=reply_markup
+    )
+
+    # Логируем отправленное сообщение для отладки
+    logger.info(f"Inline сообщение отправлено пользователю {update.message.from_user.id}: '{message}'")
