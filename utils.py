@@ -72,3 +72,4 @@ def calculate_windows(price_per_panel, num_panels):
         'total_cost': total_cost,
         'formatted_message': formatted_message
     }
+#dfgdfdgfdg
