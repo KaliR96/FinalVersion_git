@@ -278,3 +278,4 @@ async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, u
 
     # Логирование для отладки
     logger.info(f"Администратор {update.message.from_user.id} просматривает отзывы для модерации.")
+смии
