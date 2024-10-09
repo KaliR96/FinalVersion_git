@@ -294,12 +294,6 @@ async def handle_reviews_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data['state'] = 'reviews_menu'
 
 
-async def handle_write_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обрабатывает состояние написания отзыва."""
-    await update.message.reply_text("Пожалуйста, напишите ваш отзыв.")
-    context.user_data['state'] = 'writing_review'  # Состояние для написания отзыва
-
-
 async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обрабатывает состояние просмотра отзывов."""
     channel_url = "https://t.me/CleaningSphere"  # Реальная ссылка на канал с отзывами
@@ -312,11 +306,14 @@ async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     context.user_data['state'] = 'main_menu'
 
+async def handle_write_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает состояние написания отзыва."""
+    await update.message.reply_text("Пожалуйста, напишите ваш отзыв.")
+    context.user_data['state'] = 'writing_review'  # Состояние для написания отзыва
 
 # Функция для обработки отзыва и отправки его в админский чат
 async def handle_write_review_content(update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str) -> None:
     """Обрабатывает контент отзыва, отправленный пользователем."""
-    # Сохраняем отзыв в bot_data для последующей модерации
     review = {
         'user_id': update.message.from_user.id,
         'user_name': update.message.from_user.first_name,
@@ -327,15 +324,38 @@ async def handle_write_review_content(update: Update, context: ContextTypes.DEFA
         'photo_file_ids': []  # Если у нас будут фото, можно будет их добавить сюда
     }
 
-    # Добавляем отзыв в список ожидающих модерации
+    # Сохраняем отзыв в bot_data для модерации
     if 'reviews' not in context.application.bot_data:
         context.application.bot_data['reviews'] = []
 
     context.application.bot_data['reviews'].append(review)
 
     await update.message.reply_text("Ваш отзыв отправлен на модерацию. Спасибо!")
-    context.user_data['state'] = 'main_menu'
 
+    # Переводим пользователя обратно в главное меню
+    context.user_data['state'] = 'main_menu'
+    await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+
+async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
+    try:
+        if review['photo_file_ids']:
+            if len(review['photo_file_ids']) > 1:
+                media_group = [InputMediaPhoto(photo_id) for photo_id in review['photo_file_ids']]
+                await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media_group)
+            else:
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=review['photo_file_ids'][0])
+
+        await context.bot.forward_message(
+            chat_id=CHANNEL_ID,
+            from_chat_id=review['user_id'],
+            message_id=review['message_id']
+        )
+
+        review['approved'] = True
+        logger.info(f"Отзыв от {review['user_name']} успешно опубликован в канал.")
+    except Exception as e:
+        logger.error(f"Ошибка при публикации отзыва: {e}")
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"Ошибка при публикации отзыва: {e}")
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
     """Обрабатывает контактную информацию."""
@@ -394,25 +414,4 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             context.user_data['state'] = 'admin_menu'
             return
 
-
-async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
-    try:
-        if review['photo_file_ids']:
-            if len(review['photo_file_ids']) > 1:
-                media_group = [InputMediaPhoto(photo_id) for photo_id in review['photo_file_ids']]
-                await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media_group)
-            else:
-                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=review['photo_file_ids'][0])
-
-        await context.bot.forward_message(
-            chat_id=CHANNEL_ID,
-            from_chat_id=review['user_id'],
-            message_id=review['message_id']
-        )
-
-        review['approved'] = True
-        logger.info(f"Отзыв от {review['user_name']} успешно опубликован в канал.")
-    except Exception as e:
-        logger.error(f"Ошибка при публикации отзыва: {e}")
-        await context.bot.send_message(chat_id=ADMIN_ID, text=f"Ошибка при публикации отзыва: {e}")
 
