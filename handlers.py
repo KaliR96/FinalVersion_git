@@ -1,9 +1,11 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from menu_tree import MENU_TREE
-from constants import CLEANING_PRICES, CLEANING_DETAILS
+from constants import CLEANING_PRICES, CLEANING_DETAILS, CHANNEL_ID
 from utils import send_message
-from constants import CHANNEL_LINK
+from constants import CHANNEL_LINK, ADMIN_ID
+from telegram import InputMediaPhoto
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif user_state == 'reviews_menu' and user_message == 'Просмотреть отзывы':
             await handle_view_reviews(update, context)
             return
+
+        # Обработка состояния написания отзыва
+        elif user_state == 'writing_review':
+            await handle_write_review_content(update, context, user_message)
+            return
+
 
         # Глобальная обработка кнопки "Главное меню🔙"
         elif user_message == 'Главное меню🔙':
@@ -288,6 +296,22 @@ async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data['state'] = 'main_menu'
 
 
+# Функция для обработки отзыва и отправки его в админский чат
+async def handle_write_review_content(update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str) -> None:
+    """Обрабатывает содержание отзыва и отправляет его на модерацию в админский чат."""
+
+    # Отправляем отзыв в админский канал для модерации
+    await context.bot.send_message(chat_id=ADMIN_ID,
+                                   text=f"Новый отзыв от {update.message.from_user.first_name}: {user_message}")
+
+    # Подтверждаем пользователю, что отзыв был получен
+    await update.message.reply_text("Спасибо за ваш отзыв! Он был отправлен на модерацию.")
+
+    # Возвращаем пользователя в главное меню (обычного пользователя)
+    context.user_data['state'] = 'main_menu'
+    await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+
+
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
     """Обрабатывает контактную информацию."""
     if user_choice == 'Главное меню🔙':
@@ -315,12 +339,70 @@ async def handle_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
 # Обработка callback для инлайн-кнопки "Показать номер"
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer()  # Ответ на callback для индикации
-    # Проверка нажатой кнопки
-    if query.data == 'show_phone_number':
-        # Отправка номера телефона через edit_message_text
-        await query.edit_message_text(text="Вы можете связаться по номеру: +7 (995) 612-45-81")
-    else:
-        # Если нажатие на другую кнопку, например, в меню "Связаться📞"
-        menu = MENU_TREE.get(context.user_data.get('state'), MENU_TREE['main_menu'])
-        await query.edit_message_text(text=menu['message'], reply_markup=InlineKeyboardMarkup(menu['options']))
+    await query.answer()
+
+    # Получаем текущее состояние пользователя
+    user_state = context.user_data.get('state', 'main_menu')
+
+    # Проверяем нажатие на кнопку с номером телефона
+    if query.data == "show_phone_number":
+        # Отправляем сообщение с номером телефона
+        await query.message.reply_text("Ваш номер телефона: +79956124581")
+        return
+
+    # Если состояние пользователя в модерации
+    if user_state == 'moderation_menu':
+        # Ищем действие и message_id в callback_data
+        action, message_id = query.data.split('_')
+        pending_reviews = context.application.bot_data.get('reviews', [])
+        review = next((r for r in pending_reviews if str(r['message_id']) == message_id), None)
+
+        if review:
+            if action == 'delete':
+                # Отмечаем отзыв как удаленный
+                review['deleted'] = True
+                await query.edit_message_text(text="Отзыв безвозвратно удален.")
+                context.application.bot_data['reviews'].remove(review)
+
+            elif action == 'publish':
+                # Отмечаем отзыв как опубликованный
+                review['approved'] = True
+                await publish_review(context, review)
+                await query.edit_message_text(text="Отзыв успешно опубликован.")
+                for r in context.application.bot_data['reviews']:
+                    if r['user_id'] == review['user_id'] and r['message_id'] == review['message_id']:
+                        r['approved'] = True
+
+        # Проверка оставшихся отзывов для модерации
+        remaining_reviews = [r for r in pending_reviews if not r.get('approved', False) and not r.get('deleted', False)]
+        if not remaining_reviews:
+            await context.bot.send_message(chat_id=query.message.chat_id, text="Все отзывы обработаны.")
+            context.user_data.pop('pending_reviews', None)
+            context.user_data['state'] = 'admin_menu'
+            return
+
+        context.user_data['state'] = 'moderation_menu'
+
+async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
+    try:
+        if review.get('photo_file_ids'):
+            if len(review['photo_file_ids']) > 1:
+                media_group = [InputMediaPhoto(photo_id) for photo_id in review['photo_file_ids']]
+                await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media_group)
+            else:
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=review['photo_file_ids'][0])
+
+        await context.bot.forward_message(
+            chat_id=CHANNEL_ID,
+            from_chat_id=review['user_id'],
+            message_id=review['message_id']
+        )
+
+        review['approved'] = True
+        logger.info(f"Отзыв от {review['user_name']} успешно опубликован в канал.")
+    except Exception as e:
+        logger.error(f"Ошибка при публикации отзыва: {e}")
+        await context.bot.send_message(chat_id=ADMIN_ID,
+                                       text=f"Не удалось опубликовать отзыв от {review['user_name']}. Ошибка: {e}")
+
+
