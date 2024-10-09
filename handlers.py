@@ -1,18 +1,36 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram import ReplyKeyboardMarkup
-from telegram import ParseMode
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, \
+    InlineKeyboardMarkup  # Правильные импорты кнопок
+from telegram.ext import ContextTypes
+from utils import send_tariff_details  # Импорт функции из utils.py
+from menu_tree import MENU_TREE
+from constants import CLEANING_PRICES, CLEANING_DETAILS
+from utils import send_message, send_inline_message
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Динамическое добавление состояний для каждого тарифа с кнопкой "Калькулятор🧮"
+for tariff_name, details in CLEANING_DETAILS.items():
+    MENU_TREE[f'detail_{tariff_name}'] = {
+        'message': details['details_text'],
+        'image_path': details['image_path'],
+        'options': ['Калькулятор🧮', 'Назад'],
+        'next_state': {
+            'Калькулятор🧮': 'calculator_menu',
+            'Назад': 'show_tariffs'
+        }
+    }
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
-    user_state = context.user_data.get('state',
-                                       'main_menu')  # Получаем текущее состояние пользователя, если его нет, по умолчанию "main_menu"
+    user_state = context.user_data.get('state', 'main_menu')  # Текущее состояние пользователя или 'main_menu' по умолчанию
     user_choice = update.message.text.strip()  # Текст сообщения от пользователя
 
-    # Логируем текущую информацию для отладки
+    # Логирование текущей информации для отладки
     logger.info(f"User {user_id} in state {user_state} selected: {user_choice}")
 
-    # Пример состояния: пользователь находится в "главном меню"
+    # Главное меню
     if user_state == 'main_menu':
         if user_choice == 'Полезная информация📢':
             # Переход на состояние "Полезная информация"
@@ -23,50 +41,85 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif user_choice == 'Тарифы🏷️':
             # Переход на состояние "Показ тарифов"
             context.user_data['state'] = 'show_tariffs'
-            await send_message(update, context, MENU_TREE['show_tariffs']['message'],
-                               MENU_TREE['show_tariffs']['options'])
+            await send_message(update, context, MENU_TREE['show_tariffs']['message'], MENU_TREE['show_tariffs']['options'])
             return
 
         elif user_choice == 'Отзывы💬':
             # Переход на состояние "Отзывы"
             context.user_data['state'] = 'reviews_menu'
-            await send_message(update, context, MENU_TREE['reviews_menu']['message'],
-                               MENU_TREE['reviews_menu']['options'])
+            await send_message(update, context, MENU_TREE['reviews_menu']['message'], MENU_TREE['reviews_menu']['options'])
             return
 
-    # Пример состояния: пользователь пишет отзыв
+        elif user_choice == 'Связаться📞':
+            # Переход на состояние "Контакты"
+            context.user_data['state'] = 'contact_menu'
+            await send_message(update, context, MENU_TREE['contact_menu']['message'], MENU_TREE['contact_menu']['options'])
+            return
+
+        else:
+            # Если не распознано, остаёмся в главном меню
+            await send_message(update, context, "Пожалуйста, выберите опцию из меню.", MENU_TREE['main_menu']['options'])
+            return
+
+    # Меню тарифов
+    elif user_state == 'show_tariffs':
+        if user_choice in CLEANING_DETAILS:  # Проверяем, что тариф существует в данных
+            # Отправляем детали выбранного тарифа
+            await send_tariff_details(update, context, user_choice)
+            return
+
+        elif user_choice == 'Назад🔙':
+            # Возврат в главное меню
+            context.user_data['state'] = 'main_menu'
+            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+            return
+
+    # Меню отзывов
+    elif user_state == 'reviews_menu':
+        if user_choice == 'Написать отзыв📝':
+            # Переход на состояние написания отзыва
+            context.user_data['state'] = 'write_review'
+            await send_message(update, context, "Пожалуйста, напишите ваш отзыв:", [['Назад🔙']])
+            return
+
+        elif user_choice == 'Назад🔙':
+            # Возврат в главное меню
+            context.user_data['state'] = 'main_menu'
+            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+            return
+
+    # Написание отзыва
     elif user_state == 'write_review':
-        review_text = update.message.caption or update.message.text  # Считываем текст отзыва
+        review_text = update.message.text  # Считываем текст отзыва
         if review_text:
-            # Обработка отзыва: добавляем его в бот-данные и отправляем подтверждение
-            review_data = {
-                'review': review_text,
-                'user_id': user_id,
-                'approved': False
-            }
+            # Обработка отзыва и возврат в главное меню
+            review_data = {'review': review_text, 'user_id': user_id, 'approved': False}
             context.application.bot_data.setdefault('reviews', []).append(review_data)
-            await send_message(update, context, "Спасибо за ваш отзыв! Он будет опубликован после модерации.",
-                               MENU_TREE['write_review']['options'])
+            await send_message(update, context, "Спасибо за ваш отзыв! Он будет опубликован после модерации.", MENU_TREE['main_menu']['options'])
             context.user_data['state'] = 'main_menu'
             return
 
-    # Пример состояния: калькулятор расчета услуг
+    # Калькулятор услуг
     elif user_state == 'calculator_menu':
         if user_choice in CLEANING_PRICES:
-            # Если пользователь выбрал тариф
+            # Переход на состояние ввода квадратных метров
             context.user_data['selected_tariff'] = user_choice
-            await send_message(update, context, "Введите количество квадратных метров:",
-                               MENU_TREE['enter_square_meters']['options'])
             context.user_data['state'] = 'enter_square_meters'
+            await send_message(update, context, "Введите количество квадратных метров:", [['Назад🔙']])
             return
 
-    # Пример состояния: ввод метража для тарифа
+    # Ввод метража для тарифа
     elif user_state == 'enter_square_meters':
         await handle_square_meters_input(update, context)  # Обрабатываем ввод метража
+        return
 
-    # Если состояние не было распознано, отправляем fallback-сообщение
+    # Если состояние не распознано, возвращаемся в главное меню
     else:
+        logger.warning(f"Неизвестное состояние: {user_state}. Возврат в главное меню.")
+        context.user_data['state'] = 'main_menu'
         await send_message(update, context, "Пожалуйста, выберите опцию из меню.", MENU_TREE['main_menu']['options'])
+
+
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query  # Получаем объект нажатой кнопки
@@ -124,6 +177,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Если кнопка не соответствует текущему состоянию пользователя
     await query.message.reply_text("Пожалуйста, выберите правильную опцию.")
 
+
 async def show_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Ссылка на ваш Telegram-канал или другую полезную информацию
     channel_url = "https://t.me/your_channel"  # Замените на вашу реальную ссылку
@@ -140,6 +194,7 @@ async def show_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # Логируем отправку сообщения для отладки
     logger.info(f"Полезная информация отправлена пользователю {update.message.from_user.id}")
+
 
 async def handle_square_meters_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_choice = update.message.text.strip()
@@ -183,6 +238,7 @@ async def handle_square_meters_input(update: Update, context: ContextTypes.DEFAU
         await send_message(update, context, 'Пожалуйста, введите корректное количество квадратных метров.',
                            MENU_TREE['enter_square_meters']['options'])
 
+
 async def prompt_for_extras(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Список дополнительных услуг
     extras_options = [
@@ -209,11 +265,13 @@ async def prompt_for_extras(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Логирование для отладки
     logger.info(f"Пользователю {update.message.from_user.id} предложены дополнительные услуги.")
 
+
 async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, user_state: str) -> None:
     # Получаем список отзывов, которые находятся на модерации
     pending_reviews = context.application.bot_data.get('reviews', [])
     # Отбираем только те отзывы, которые не опубликованы и не удалены
-    pending_reviews = [review for review in pending_reviews if not review.get('approved', False) and not review.get('deleted', False)]
+    pending_reviews = [review for review in pending_reviews if
+                       not review.get('approved', False) and not review.get('deleted', False)]
 
     # Проверяем, есть ли отзывы для модерации
     if not pending_reviews:
@@ -245,6 +303,7 @@ async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     # Логирование для отладки
     logger.info(f"Администратор {update.message.from_user.id} просматривает отзывы для модерации.")
 
+
 async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
     # ID канала, куда будут публиковаться отзывы (замените на реальный ID канала)
     review_channel_id = "@your_review_channel"
@@ -260,7 +319,7 @@ async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> No
     await context.bot.send_message(
         chat_id=review_channel_id,
         text=review_message,
-        parse_mode=ParseMode.HTML  # Используем HTML для форматирования текста
+        parse_mode='HTML'  # Используем HTML для форматирования текста
     )
 
     # Логируем успешную публикацию
@@ -269,8 +328,8 @@ async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> No
     # Обновляем статус отзыва как "опубликованный"
     review['approved'] = True
 
-def calculate_windows(price_per_panel: float, num_panels: int) -> dict:
 
+def calculate_windows(price_per_panel: float, num_panels: int) -> dict:
     # Рассчитываем общую стоимость
     total_cost = price_per_panel * num_panels
 
@@ -291,6 +350,7 @@ def calculate_windows(price_per_panel: float, num_panels: int) -> dict:
         'total_cost': total_cost,
         'formatted_message': formatted_message
     }
+
 
 async def complete_calculation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Получаем общую стоимость заказа из данных пользователя
@@ -326,49 +386,3 @@ async def complete_calculation(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Сбрасываем состояние пользователя на главное меню
     context.user_data['state'] = 'main_menu'
-
-async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options: list) -> None:
-    """
-    Отправляет сообщение пользователю с кнопками.
-
-    :param update: Update - объект, представляющий обновление от Telegram API.
-    :param context: ContextTypes.DEFAULT_TYPE - объект контекста, предоставляющий информацию о состоянии бота и пользователя.
-    :param message: str - текст сообщения, которое будет отправлено пользователю.
-    :param options: list - список вариантов кнопок для ответа пользователя.
-    """
-    # Создаем клавиатуру с кнопками на основе переданных опций
-    reply_markup = ReplyKeyboardMarkup(
-        keyboard=[[option] for option in options],  # Преобразуем каждый элемент списка в строку кнопок
-        resize_keyboard=True,  # Изменяет размер клавиатуры для более компактного отображения
-        one_time_keyboard=True  # Клавиатура исчезает после нажатия
-    )
-
-    # Отправляем сообщение с кнопками
-    await update.message.reply_text(
-        text=message,
-        reply_markup=reply_markup
-    )
-
-    # Логирование отправленного сообщения для отладки
-    logger.info(f"Сообщение отправлено пользователю {update.message.from_user.id}: '{message}'")
-
-async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, buttons: list) -> None:
-    """
-    Отправляет сообщение с inline-кнопками пользователю.
-
-    :param update: Update - объект, представляющий обновление от Telegram API.
-    :param context: ContextTypes.DEFAULT_TYPE - объект контекста, предоставляющий информацию о состоянии бота и пользователя.
-    :param message: str - текст сообщения, которое будет отправлено пользователю.
-    :param buttons: list - список inline-кнопок для взаимодействия пользователя.
-    """
-    # Создаем разметку с inline-кнопками
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    # Отправляем сообщение с inline-кнопками
-    await update.message.reply_text(
-        text=message,
-        reply_markup=reply_markup
-    )
-
-    # Логируем отправленное сообщение для отладки
-    logger.info(f"Inline сообщение отправлено пользователю {update.message.from_user.id}: '{message}'")

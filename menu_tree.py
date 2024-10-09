@@ -149,14 +149,3 @@ MENU_TREE = {
     }
 }
 
-# Динамическое добавление состояний для каждого тарифа с кнопкой "Калькулятор🧮"
-for tariff_name, details in CLEANING_DETAILS.items():
-    MENU_TREE[f'detail_{tariff_name}'] = {
-        'message': details['details_text'],
-        'image_path': details['image_path'],
-        'options': ['Калькулятор🧮', 'Назад'],
-        'next_state': {
-            'Калькулятор🧮': 'calculator_menu',
-            'Назад': 'show_tariffs'
-        }
-    }

@@ -1,5 +1,8 @@
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, Update, InlineKeyboardButton, InputMediaPhoto
+import os
+from telegram import InputFile
 from telegram.ext import ContextTypes
+from constants import CLEANING_DETAILS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -72,4 +75,23 @@ def calculate_windows(price_per_panel, num_panels):
         'total_cost': total_cost,
         'formatted_message': formatted_message
     }
-#dfgdfdgfdg
+
+async def send_tariff_details(update: Update, context: ContextTypes.DEFAULT_TYPE, tariff: str) -> None:
+    tariff_details = CLEANING_DETAILS.get(tariff)
+
+    if not tariff_details:
+        await update.message.reply_text("Извините, информация о тарифе не найдена.")
+        return
+
+    # Отправляем изображение тарифа
+    image_path = tariff_details['image_path']
+    if os.path.exists(image_path):
+        with open(image_path, 'rb') as image_file:
+            await context.bot.send_photo(chat_id=update.message.chat_id, photo=InputFile(image_file))
+    else:
+        await update.message.reply_text("Изображение не найдено.")
+
+    # Отправляем текстовые детали тарифа
+    for detail in tariff_details['details_text']:
+        await update.message.reply_text(detail)
+
