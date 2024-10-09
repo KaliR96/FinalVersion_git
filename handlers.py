@@ -1,4 +1,4 @@
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from menu_tree import MENU_TREE
 from constants import CLEANING_PRICES, CLEANING_DETAILS
@@ -21,43 +21,111 @@ for tariff_name, details in CLEANING_DETAILS.items():
     }
 
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_message = update.message.text.strip()  # Удаляем лишние символы
-    user_state = context.user_data.get('state', 'main_menu')
+    # Проверка, является ли запрос текстовым сообщением или callback-запросом
+    if update.message:
+        # Это текстовое сообщение
+        user_message = update.message.text.strip()
+        user_state = context.user_data.get('state', 'main_menu')
 
-    logger.info(f"User state: {user_state}, User message: {user_message}")
+        logger.info(f"User state: {user_state}, User message: {user_message}")
 
-    # Проверка состояния и вызов соответствующей функции
-    if user_state == 'main_menu' and user_message == 'Тарифы🏷️':
-        context.user_data['state'] = 'show_tariffs'
-        await send_message(update, context, "Выберите тариф для получения подробной информации:", MENU_TREE['show_tariffs']['options'])
-    elif user_state == 'show_tariffs':
-        await handle_show_tariffs(update, context, user_message)
-    elif user_state.startswith('detail_') and user_message == 'Калькулятор🧮':
-        # Логика обработки нажатия на "Калькулятор🧮"
-        context.user_data['state'] = 'calculator_menu'
-        await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
-    elif user_state == 'calculator_menu':
-        # Обработка выбора тарифа внутри калькулятора
-        if user_message in CLEANING_PRICES:
-            context.user_data['selected_tariff'] = user_message
-            context.user_data['state'] = 'enter_square_meters'
-            await send_message(update, context, "Введите количество квадратных метров для уборки:", MENU_TREE['enter_square_meters']['options'])
+        # Глобальная обработка кнопки "Связаться📞" независимо от состояния
+        if user_message == 'Связаться📞':
+            # Инлайн-кнопки для контактов
+            keyboard = [
+                [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
+                [InlineKeyboardButton("Telegram", url="https://t.me/kaliroom")],
+                [InlineKeyboardButton("Показать номер", callback_data="show_phone_number")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Связаться📞 со мной вы можете через следующие каналы:",
+                                            reply_markup=reply_markup)
+            context.user_data['state'] = 'contact'
+            return  # Прерываем дальнейшую обработку после отправки сообщения
+
+        # Замена Inline-кнопок на вызов функции с Reply-кнопками для "Отзывы💬"
+        elif user_message == 'Отзывы💬':
+            # Вызываем функцию, которая обрабатывает меню отзывов с Reply-кнопками
+            await handle_reviews_menu(update, context)
+            return
+
+            # Обработка кнопки "Написать отзыв"
+        elif user_state == 'reviews_menu' and user_message == 'Написать отзыв':
+            await handle_write_review(update, context)
+            return
+
+        # Обработка кнопки "Посмотреть отзывы"
+        elif user_state == 'reviews_menu' and user_message == 'Просмотреть отзывы':
+            await handle_view_reviews(update, context)
+            return
+
+        # Глобальная обработка кнопки "Главное меню🔙"
+        elif user_message == 'Главное меню🔙':
+            context.user_data['state'] = 'main_menu'
+            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+            return
+
+        # Глобальная обработка кнопки "Калькулятор🧮"
+        elif user_message == 'Калькулятор🧮':
+            context.user_data['state'] = 'calculator_menu'
+            await send_message(update, context, MENU_TREE['calculator_menu']['message'],
+                               MENU_TREE['calculator_menu']['options'])
+            return
+
+        # Остальные состояния обрабатываются как обычно
+        if user_state == 'main_menu' and user_message == 'Тарифы🏷️':
+            context.user_data['state'] = 'show_tariffs'
+            await send_message(update, context, "Выберите тариф для получения подробной информации:",
+                               MENU_TREE['show_tariffs']['options'])
+        elif user_state == 'show_tariffs':
+            await handle_show_tariffs(update, context, user_message)
+        elif user_state.startswith('detail_') and user_message == 'Калькулятор🧮':
+            context.user_data['state'] = 'calculator_menu'
+            await send_message(update, context, MENU_TREE['calculator_menu']['message'],
+                               MENU_TREE['calculator_menu']['options'])
+        elif user_state == 'calculator_menu':
+            # Обработка выбора тарифа внутри калькулятора
+            if user_message in CLEANING_PRICES:
+                context.user_data['selected_tariff'] = user_message
+                context.user_data['state'] = 'enter_square_meters'
+                await send_message(update, context, "Введите количество квадратных метров для уборки:",
+                                   MENU_TREE['enter_square_meters']['options'])
+            else:
+                await send_message(update, context, "Пожалуйста, выберите тариф из списка:",
+                                   MENU_TREE['calculator_menu']['options'])
+        elif user_state == 'enter_square_meters':
+            await handle_enter_square_meters(update, context, user_message)
+        elif user_state == 'enter_window_panels':
+            await handle_enter_window_panels(update, context, user_message)
+        elif user_state == 'add_extras':
+            await handle_add_extras(update, context, user_message)
         else:
-            await send_message(update, context, "Пожалуйста, выберите тариф из списка:", MENU_TREE['calculator_menu']['options'])
-    elif user_state == 'enter_square_meters':
-        await handle_enter_square_meters(update, context, user_message)
-    elif user_state == 'enter_window_panels':
-        await handle_enter_window_panels(update, context, user_message)
-    elif user_state == 'add_extras':
-        await handle_add_extras(update, context, user_message)
-    else:
-        logger.warning(f"Unknown state: {user_state}, redirecting to handle_unknown_message.")
-        await handle_unknown_message(update, context)
+            logger.warning(f"Unknown state: {user_state}, redirecting to handle_unknown_message.")
+            await handle_unknown_message(update, context)
+
+    elif update.callback_query:
+        # Это callback-запрос (нажатие инлайн-кнопки)
+        query = update.callback_query
+        await query.answer()  # Ответ на callback для индикации
+
+        # Обработка callback-запроса для инлайн-кнопки "Показать номер"
+        if query.data == 'show_phone_number':
+            await query.edit_message_text(text="Вы можете связаться по номеру: +7 (995) 612-45-81")
+        elif query.data == 'write_review':
+            await query.edit_message_text(text="Пожалуйста, оставьте свой отзыв на нашем канале.")
+        else:
+            # Возвращение в главное меню при нажатии на инлайн-кнопку
+            menu = MENU_TREE.get(context.user_data.get('state'), MENU_TREE['main_menu'])
+            await query.edit_message_text(text=menu['message'], reply_markup=InlineKeyboardMarkup(menu['options']))
+
+
+# Обработка callback для инлайн-кнопки "Показать номер"
+async def show_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()  # Ответ на callback для индикации
+    # Отправка номера телефона через edit_message_text
+    await query.edit_message_text(text="Вы можете связаться по номеру: +7 (995) 612-45-81")
 
 
 async def handle_show_tariffs(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
@@ -109,15 +177,21 @@ async def handle_enter_square_meters(update: Update, context: ContextTypes.DEFAU
             context.user_data['total_cost'] = total_cost  # Сохраняем начальную стоимость
             await update.message.reply_text(f"Стоимость уборки: {total_cost} руб.")
 
-        # Проверяем, выбран ли один из тарифов: Генеральная уборка или Повседневная уборка
+        # Если тариф "Генеральная уборка" или "Повседневная уборка" — предлагаем доп. услуги и кнопки
         if selected_tariff in ['Ген.Уборка🧼', 'Повседневная🧹']:
             context.user_data['state'] = 'add_extras'
-            await send_message(update, context, MENU_TREE['add_extras']['message'], MENU_TREE['add_extras']['options'])
+            await send_message(update, context,
+                               "Вы можете выбрать дополнительные услуги, связаться со мной или вернуться в главное меню:",
+                               [['Глажка белья', 'Стирка белья'],
+                                ['Почистить лоток', 'Уход за цветами'],
+                                ['Мытье окон(1 створка)🧴'],
+                                ['Связаться📞', 'Главное меню🔙']])
         else:
-            # Если тариф другой, завершаем расчет
-            await update.message.reply_text(f"Итоговая стоимость уборки: {total_cost} руб.")
-            context.user_data['state'] = 'main_menu'
-            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+            # Для других тарифов (например, "Послестрой", "Мытье окон") сразу предлагаем кнопки "Связаться" и "Главное меню"
+
+            await send_message(update, context, "Вы можете связаться со мной или вернуться в главное меню.",
+                               [['Связаться📞', 'Главное меню🔙']])
+            context.user_data['state'] = 'final_decision'
 
     except ValueError:
         await update.message.reply_text("Пожалуйста, введите корректное число для квадратных метров.")
@@ -129,13 +203,14 @@ async def handle_enter_window_panels(update: Update, context: ContextTypes.DEFAU
         num_panels = int(user_input)
         context.user_data['window_panels'] = num_panels
         context.user_data['state'] = 'calculate_result'
-        await send_message(update, context, MENU_TREE['calculate_result']['message'], MENU_TREE['calculate_result']['options'])
+        await send_message(update, context, MENU_TREE['calculate_result']['message'],
+                           MENU_TREE['calculate_result']['options'])
     except ValueError:
         await update.message.reply_text("Пожалуйста, введите корректное число для оконных створок.")
 
 
 async def handle_add_extras(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
-    """Обрабатывает выбор дополнительных услуг."""
+    """Обрабатывает выбор дополнительных услуг и завершение взаимодействия."""
     # Доп услуги и их стоимость
     EXTRA_SERVICES = {
         'Глажка белья': 600,
@@ -145,7 +220,6 @@ async def handle_add_extras(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         'Мытье окон(1 створка)🧴': 350
     }
 
-    # Если пользователь выбрал услугу, прибавляем её стоимость
     if user_choice in EXTRA_SERVICES:
         extra_cost = EXTRA_SERVICES[user_choice]
         total_cost = context.user_data.get('total_cost', 0)  # Получаем текущую сумму
@@ -153,52 +227,66 @@ async def handle_add_extras(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         context.user_data['total_cost'] = total_cost  # Сохраняем обновленную сумму
         await update.message.reply_text(f"Добавлено: {user_choice}. Общая стоимость: {total_cost} руб.")
 
-        # Продолжаем предлагать другие доп услуги
-        await send_message(update, context, "Выберите дополнительные услуги или завершите расчет:",
-                           MENU_TREE['add_extras']['options'])
+        # Продолжаем предлагать доп. услуги или завершение расчета
+        await send_message(update, context, "Вы можете добавить ещё услуги или завершить расчет:",
+                           [['Глажка белья', 'Стирка белья'],
+                            ['Почистить лоток', 'Уход за цветами'],
+                            ['Мытье окон(1 створка)🧴'],
+                            ['Связаться📞', 'Главное меню🔙']])
 
-    # Если пользователь выбрал "Связаться" или "Главное меню", выводим итоговую сумму
     elif user_choice == 'Связаться📞' or user_choice == 'Главное меню🔙':
         total_cost = context.user_data.get('total_cost', 0)
-        await update.message.reply_text(f"Итоговая стоимость уборки: {total_cost} руб.")
-        context.user_data['state'] = 'main_menu'  # Возвращаемся в главное меню
-        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+        await update.message.reply_text(f"Итоговая стоимость уборки с доп. услугами: {total_cost} руб.")
+        # Переход в главное меню или вывод контактов
+        if user_choice == 'Связаться📞':
+            await send_message(update, context, MENU_TREE['contact']['message'], MENU_TREE['contact']['options'])
+            context.user_data['state'] = 'contact'
+        elif user_choice == 'Главное меню🔙':
+            context.user_data['state'] = 'main_menu'
+            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
 
-    # Если пользователь выбрал некорректную опцию
     else:
-        await send_message(update, context, "Пожалуйста, выберите услугу из списка.",
-                           MENU_TREE['add_extras']['options'])
+        await send_message(update, context, "Пожалуйста, выберите услугу из списка или завершите расчет.",
+                           [['Глажка белья', 'Стирка белья'],
+                            ['Почистить лоток', 'Уход за цветами'],
+                            ['Мытье окон(1 створка)🧴'],
+                            ['Связаться📞', 'Главное меню🔙']])
 
 
 async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обрабатывает неизвестные команды и сообщения."""
     await send_message(update, context, "Извините, я не отправлю это сообщение. Попробуйте выбрать опцию СВЯЗАТЬСЯ")
 
-async def handle_reviews_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
-    """Обрабатывает работу с отзывами."""
-    if user_choice in MENU_TREE['reviews_menu']['next_state']:
-        next_state = MENU_TREE['reviews_menu']['next_state'][user_choice]
-        context.user_data['state'] = next_state
-        await send_message(update, context, MENU_TREE[next_state]['message'], MENU_TREE[next_state]['options'])
-    else:
-        await send_message(update, context, "Выберите опцию для работы с отзывами.", MENU_TREE['reviews_menu']['options'])
 
-async def handle_write_review(update: Update, context: ContextTypes.DEFAULT_TYPE, user_input: str) -> None:
-    """Обрабатывает написание отзыва."""
-    # Логика для сохранения отзыва
-    await update.message.reply_text("Спасибо за ваш отзыв!")
+async def handle_reviews_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает меню отзывов с кнопкой 'Главное меню🔙'."""
+    # Создаем Reply-кнопки
+    keyboard = [['Написать отзыв', 'Просмотреть отзывы'], ['Главное меню🔙']]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+    # Отправляем сообщение с Reply-кнопками
+    await update.message.reply_text("Что вы хотите сделать?", reply_markup=reply_markup)
+    context.user_data['state'] = 'reviews_menu'
+
+
+async def handle_write_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает состояние написания отзыва."""
+    await update.message.reply_text("Пожалуйста, напишите ваш отзыв.")
+    context.user_data['state'] = 'writing_review'  # Состояние для написания отзыва
+
+
+async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает состояние просмотра отзывов."""
+    channel_url = "https://t.me/CleaningSphere"  # Реальная ссылка на канал с отзывами
+    await update.message.reply_text(f"Просмотрите все отзывы на нашем канале: {channel_url}")
+
+    # Переход в главное меню после просмотра отзывов
+    reply_keyboard = [['Главное меню🔙']]
+    reply_markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True)
+    await update.message.reply_text("Вернуться в главное меню:", reply_markup=reply_markup)
+
     context.user_data['state'] = 'main_menu'
-    await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
 
-async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
-    """Обрабатывает просмотр отзывов."""
-    if user_choice == 'Перейти к каналу':
-        await update.message.reply_text("Вот ссылка на наш канал: https://t.me/your_channel")
-    elif user_choice == 'Главное меню🔙':
-        context.user_data['state'] = 'main_menu'
-        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
-    else:
-        await send_message(update, context, "Выберите действие для работы с отзывами.", MENU_TREE['view_reviews']['options'])
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
     """Обрабатывает контактную информацию."""
@@ -206,7 +294,9 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         context.user_data['state'] = 'main_menu'
         await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
     else:
-        await send_message(update, context, "Связаться со мной вы можете через следующие каналы.", MENU_TREE['contact']['options'])
+        await send_message(update, context, "Связаться со мной вы можете через следующие каналы.",
+                           MENU_TREE['contact']['options'])
+
 
 async def handle_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
     """Обрабатывает полезную информацию и перенаправляет в канал."""
@@ -221,18 +311,16 @@ async def handle_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
                            f"Посетите наш канал для получения последних новостей, акций и розыгрышей!\n\n{CHANNEL_LINK}",
                            MENU_TREE['useful_info']['options'])
 
+
+# Обработка callback для инлайн-кнопки "Показать номер"
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-            query = update.callback_query
-            await query.answer()
-
-            user_state = context.user_data.get('state', 'main_menu')
-
-            if user_state in MENU_TREE:
-                next_state = MENU_TREE[user_state]['next_state'].get(query.data, user_state)
-                context.user_data['state'] = next_state
-
-                menu = MENU_TREE[next_state]
-                await send_message(update, context, menu['message'], menu['options'])
-            else:
-                await send_message(update, context, "Неизвестная команда. Попробуйте снова.")
-
+    query = update.callback_query
+    await query.answer()  # Ответ на callback для индикации
+    # Проверка нажатой кнопки
+    if query.data == 'show_phone_number':
+        # Отправка номера телефона через edit_message_text
+        await query.edit_message_text(text="Вы можете связаться по номеру: +7 (995) 612-45-81")
+    else:
+        # Если нажатие на другую кнопку, например, в меню "Связаться📞"
+        menu = MENU_TREE.get(context.user_data.get('state'), MENU_TREE['main_menu'])
+        await query.edit_message_text(text=menu['message'], reply_markup=InlineKeyboardMarkup(menu['options']))

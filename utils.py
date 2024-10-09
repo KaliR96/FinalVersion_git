@@ -21,9 +21,9 @@ async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, messa
 
 # Функция для отправки сообщения с inline-кнопками
 async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, buttons: list) -> None:
+    logger.info("Функция send_inline_message вызвана.")  # Логируем вызов функции
     keyboard = InlineKeyboardMarkup(buttons)
     await update.message.reply_text(message, reply_markup=keyboard)
-    logger.info("Отправлено сообщение с кнопками: %s", message)
 
 # Функция для расчета стоимости уборки (оригинальное название - calculate)
 def calculate(price_per_sqm, square_meters):
