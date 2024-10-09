@@ -315,18 +315,26 @@ async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # Функция для обработки отзыва и отправки его в админский чат
 async def handle_write_review_content(update: Update, context: ContextTypes.DEFAULT_TYPE, user_message: str) -> None:
-    """Обрабатывает содержание отзыва и отправляет его на модерацию в админский чат."""
+    """Обрабатывает контент отзыва, отправленный пользователем."""
+    # Сохраняем отзыв в bot_data для последующей модерации
+    review = {
+        'user_id': update.message.from_user.id,
+        'user_name': update.message.from_user.first_name,
+        'message_id': update.message.message_id,
+        'text': user_message,
+        'approved': False,
+        'deleted': False,
+        'photo_file_ids': []  # Если у нас будут фото, можно будет их добавить сюда
+    }
 
-    # Отправляем отзыв в админский канал для модерации
-    await context.bot.send_message(chat_id=ADMIN_ID,
-                                   text=f"Новый отзыв от {update.message.from_user.first_name}: {user_message}")
+    # Добавляем отзыв в список ожидающих модерации
+    if 'reviews' not in context.application.bot_data:
+        context.application.bot_data['reviews'] = []
 
-    # Подтверждаем пользователю, что отзыв был получен
-    await update.message.reply_text("Спасибо за ваш отзыв! Он был отправлен на модерацию.")
+    context.application.bot_data['reviews'].append(review)
 
-    # Возвращаем пользователя в главное меню (обычного пользователя)
+    await update.message.reply_text("Ваш отзыв отправлен на модерацию. Спасибо!")
     context.user_data['state'] = 'main_menu'
-    await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
 
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
@@ -352,40 +360,28 @@ async def handle_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
                            f"Посетите наш канал для получения последних новостей, акций и розыгрышей!\n\n{CHANNEL_LINK}",
                            MENU_TREE['useful_info']['options'])
 
-
 # Обработка callback для инлайн-кнопки "Показать номер"
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
 
-    # Получаем текущее состояние пользователя
     user_state = context.user_data.get('state', 'main_menu')
 
-    # Проверяем нажатие на кнопку с номером телефона
-    if query.data == "show_phone_number":
-        # Отправляем сообщение с номером телефона
-        await query.message.reply_text("Ваш номер телефона: +79956124581")
-        return
-
-    # Если состояние пользователя в модерации
     if user_state == 'moderation_menu':
-        # Ищем действие и message_id в callback_data
         action, message_id = query.data.split('_')
         pending_reviews = context.application.bot_data.get('reviews', [])
         review = next((r for r in pending_reviews if str(r['message_id']) == message_id), None)
 
         if review:
             if action == 'delete':
-                # Отмечаем отзыв как удаленный
                 review['deleted'] = True
-                await query.edit_message_text(text="Отзыв безвозвратно удален.")
+                await query.edit_message_text(text="Отзыв удален.")
                 context.application.bot_data['reviews'].remove(review)
 
             elif action == 'publish':
-                # Отмечаем отзыв как опубликованный
                 review['approved'] = True
                 await publish_review(context, review)
-                await query.edit_message_text(text="Отзыв успешно опубликован.")
+                await query.edit_message_text(text="Отзыв опубликован.")
                 for r in context.application.bot_data['reviews']:
                     if r['user_id'] == review['user_id'] and r['message_id'] == review['message_id']:
                         r['approved'] = True
@@ -398,11 +394,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             context.user_data['state'] = 'admin_menu'
             return
 
-        context.user_data['state'] = 'moderation_menu'
 
 async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
     try:
-        if review.get('photo_file_ids'):
+        if review['photo_file_ids']:
             if len(review['photo_file_ids']) > 1:
                 media_group = [InputMediaPhoto(photo_id) for photo_id in review['photo_file_ids']]
                 await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media_group)
@@ -419,7 +414,5 @@ async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> No
         logger.info(f"Отзыв от {review['user_name']} успешно опубликован в канал.")
     except Exception as e:
         logger.error(f"Ошибка при публикации отзыва: {e}")
-        await context.bot.send_message(chat_id=ADMIN_ID,
-                                       text=f"Не удалось опубликовать отзыв от {review['user_name']}. Ошибка: {e}")
-
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"Ошибка при публикации отзыва: {e}")
 
