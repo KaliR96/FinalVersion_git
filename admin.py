@@ -1,57 +1,42 @@
-from telegram import Update  # Для обработки обновлений
-from telegram.ext import ContextTypes  # Для работы с контекстом
-from utils import send_message  # Для отправки сообщений
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from constants import ADMIN_ID, CHANNEL_ID
 from menu_tree import MENU_TREE
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from constants import ADMIN_ID
-import logging  # Для логирования
+from utils import send_message
+import logging
 
 logger = logging.getLogger(__name__)
 
+# Функция для админ-панели
+async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_chat_id = update.message.chat_id
 
-async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
-    """Обрабатывает админ-панель."""
-
-    # Логируем выбор администратора
-    logger.info(f"Admin selected: {user_choice}")
-
-    # Проверяем, выбрана ли опция в админ-панели
-    if user_choice in MENU_TREE['admin_menu']['next_state']:
-        next_state = MENU_TREE['admin_menu']['next_state'][user_choice]
-        context.user_data['state'] = next_state
-
-        # Если выбрана модерация, отправляем администратору сообщение
-        if next_state == 'moderation_menu':
-            await context.bot.send_message(chat_id=ADMIN_ID,
-                                           text="Вы вошли в режим модерации отзывов. Вы можете просмотреть и управлять отзывами.")
-            await send_message(update, context, MENU_TREE[next_state]['message'], MENU_TREE[next_state]['options'])
-        else:
-            # Обрабатываем остальные состояния
-            await send_message(update, context, MENU_TREE[next_state]['message'], MENU_TREE[next_state]['options'])
-
+    # Проверка, является ли пользователь администратором
+    if user_chat_id == ADMIN_ID:
+        # Отправка админ-панели администратору
+        await send_message(update, context, MENU_TREE['admin_menu']['message'], MENU_TREE['admin_menu']['options'])
+        context.user_data['state'] = 'admin_menu'
     else:
-        # Если команда не распознана
-        await send_message(update, context, "Выберите корректную опцию в админ-панели.",
-                           MENU_TREE['admin_menu']['options'])
+        # Если пользователь не админ, просто выводим главное меню для обычного пользователя
+        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+        context.user_data['state'] = 'main_menu'
 
 
-async def moderation_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, user_state: str) -> None:
-    # Получаем все отзывы, которые ещё не обработаны
+# Функция для модерации отзывов
+async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     pending_reviews = [review for review in context.application.bot_data.get('reviews', [])
                        if not review.get('approved', False) and not review.get('deleted', False)]
 
     if not pending_reviews:
-        await send_message(update, context, "Нет отзывов для модерации.", MENU_TREE['admin_menu']['options'])
-        context.user_data['state'] = 'admin_menu'
+        await send_message(update, context, "Нет отзывов для модерации.", [])
         return
 
     for review in pending_reviews:
         try:
-            # Пересылаем сообщение целиком, используя сохраненный message_id
             await context.bot.forward_message(
                 chat_id=ADMIN_ID,
                 from_chat_id=review['user_id'],
-                message_id=review['message_id']  # Используем `message_id` для пересылки всего сообщения
+                message_id=review['message_id']
             )
 
             buttons = [
@@ -64,6 +49,45 @@ async def moderation_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         except Exception as e:
             logger.error(f"Ошибка при пересылке сообщения: {e}")
 
-    context.user_data['state'] = 'moderation_menu'
+# Обработка нажатия инлайн-кнопок для модерации
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
 
+    user_state = context.user_data.get('state', 'main_menu')
 
+    # Обрабатываем действия по модерации
+    if user_state == 'moderation_menu':
+        action, message_id = query.data.split('_')
+        pending_reviews = context.application.bot_data.get('reviews', [])
+        review = next((r for r in pending_reviews if str(r['message_id']) == message_id), None)
+
+        if review:
+            if action == 'delete':
+                review['deleted'] = True
+                await query.edit_message_text(text="Отзыв удален.")
+                context.application.bot_data['reviews'].remove(review)
+            elif action == 'publish':
+                review['approved'] = True
+                await publish_review(context, review)
+                await query.edit_message_text(text="Отзыв опубликован.")
+
+        remaining_reviews = [r for r in pending_reviews if not r.get('approved', False) and not r.get('deleted', False)]
+        if not remaining_reviews:
+            await context.bot.send_message(chat_id=ADMIN_ID, text="Все отзывы обработаны.")
+            context.user_data['state'] = 'admin_menu'
+            return
+
+# Публикация отзыва
+async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
+    try:
+        await context.bot.forward_message(
+            chat_id=CHANNEL_ID,
+            from_chat_id=review['user_id'],
+            message_id=review['message_id']
+        )
+        review['approved'] = True
+        logger.info(f"Отзыв от {review['user_name']} опубликован.")
+    except Exception as e:
+        logger.error(f"Ошибка при публикации отзыва: {e}")
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"Не удалось опубликовать отзыв: {e}")

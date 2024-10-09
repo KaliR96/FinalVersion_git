@@ -1,9 +1,8 @@
 import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-from handlers import show_phone_number
-from handlers import handle_message, button_click  # Обработчики сообщений и кнопок
+from handlers import show_phone_number, handle_message, button_click  # Обработчики сообщений и кнопок
 from utils import send_message  # Импортируем утилиты, если нужно для вызовов
-from constants import TOKEN  # Импортируем токен для бота
+from constants import TOKEN, ADMIN_ID  # Импортируем токен и ID администратора для бота
 from menu_tree import MENU_TREE
 
 # Настройка логирования
@@ -15,11 +14,17 @@ logger = logging.getLogger(__name__)
 
 # Основная функция для запуска бота
 async def start(update, context):
-    """Обрабатывает команду /start"""
-    # Устанавливаем состояние и отправляем стартовое сообщение
-    context.user_data['state'] = 'main_menu'
-    await send_message(update, context, 'Привет! Я Вера, твоя фея чистоты.\n\nМой робот-уборщик поможет:\n\n🔍Ознакомиться с моими '
-                   'услугами\n\n🧮Рассчитать стоимость уборки\n\n🚗Заказать клининг на дом\n\n📞Связаться со мной.', MENU_TREE['main_menu']['options'])
+    """Обрабатывает команду /start для пользователя и администратора"""
+    user_id = update.message.from_user.id
+    if user_id == ADMIN_ID:
+        # Если админ, показать админ-меню
+        context.user_data['state'] = 'admin_menu'
+        await send_message(update, context, MENU_TREE['admin_menu']['message'], MENU_TREE['admin_menu']['options'])
+    else:
+        # Обычное меню для пользователя
+        context.user_data['state'] = 'main_menu'
+        await send_message(update, context, 'Привет! Я Вера, твоя фея чистоты.\n\nМой робот-уборщик поможет:\n\n🔍Ознакомиться с моими '
+                       'услугами\n\n🧮Рассчитать стоимость уборки\n\n🚗Заказать клининг на дом\n\n📞Связаться со мной.', MENU_TREE['main_menu']['options'])
 
 def main():
     """Функция для инициализации и запуска бота"""

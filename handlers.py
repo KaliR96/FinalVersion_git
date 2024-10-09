@@ -5,6 +5,8 @@ from constants import CLEANING_PRICES, CLEANING_DETAILS, CHANNEL_ID
 from utils import send_message
 from constants import CHANNEL_LINK, ADMIN_ID
 from telegram import InputMediaPhoto
+from admin import moderate_reviews
+
 
 import logging
 
@@ -24,13 +26,28 @@ for tariff_name, details in CLEANING_DETAILS.items():
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
     # Проверка, является ли запрос текстовым сообщением или callback-запросом
     if update.message:
         # Это текстовое сообщение
+        user_id = update.message.from_user.id
         user_message = update.message.text.strip()
         user_state = context.user_data.get('state', 'main_menu')
 
         logger.info(f"User state: {user_state}, User message: {user_message}")
+
+        # Проверка, админ ли пользователь
+        if user_id == ADMIN_ID:
+            if user_message == 'Модерация':
+                await moderate_reviews(update, context)
+            elif user_message == 'Админ меню':
+                context.user_data['state'] = 'admin_menu'
+                await send_message(update, context, MENU_TREE['admin_menu']['message'],
+                                   MENU_TREE['admin_menu']['options'])
+            else:
+                await send_message(update, context, "Неизвестная команда для админа.",
+                                   MENU_TREE['admin_menu']['options'])
+            return
 
         # Глобальная обработка кнопки "Связаться📞" независимо от состояния
         if user_message == 'Связаться📞':

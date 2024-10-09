@@ -6,18 +6,20 @@ from telegram.ext import ContextTypes
 logger = logging.getLogger(__name__)
 
 # Функция для отправки сообщений
-async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options: list) -> None:
-    # Проверяем, что `options` это список списков
-    if isinstance(options[0], list):
-        reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
+async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options=None):
+    """Отправляет сообщение пользователю с заданными опциями (если они есть)."""
+    if options:
+        if isinstance(options[0], list):  # Проверяем, что `options` это список списков
+            reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
+        else:
+            # Если `options` - это просто список, преобразуем его в список списков
+            reply_markup = ReplyKeyboardMarkup([options], resize_keyboard=True, one_time_keyboard=True)
+
+        await update.message.reply_text(message, reply_markup=reply_markup)
     else:
-        # Если `options` - это просто список, преобразуем его в список списков
-        reply_markup = ReplyKeyboardMarkup([options], resize_keyboard=True, one_time_keyboard=True)
+        # Если опций нет, отправляем просто сообщение без кнопок
+        await update.message.reply_text(message)
 
-    # Логируем отправку сообщения и состояние
-    logger.info(f"Отправка сообщения с текстом: {message} и состоянием: {context.user_data.get('state', 'main_menu')}")
-
-    await update.message.reply_text(message, reply_markup=reply_markup)
 
 # Функция для отправки сообщения с inline-кнопками
 async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, buttons: list) -> None:
