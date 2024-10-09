@@ -1,42 +1,37 @@
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
-from handlers import handle_message, button_click
-from telegram import Update
-from constants import ADMIN_ID
-from utils import send_message
-from menu_tree import MENU_TREE
 import logging
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from handlers import handle_message, button_click  # Обработчики сообщений и кнопок
+from utils import send_message  # Импортируем утилиты, если нужно для вызовов
+from constants import TOKEN  # Импортируем токен для бота
+from menu_tree import MENU_TREE
 
-# Настраиваем логирование
-logging.basicConfig(level=logging.INFO)
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-TOKEN = '7363733923:AAHKPw_fvjG2F3PBE2XP6Sj49u04uy7wpZE'
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.from_user.id
-    if user_id == ADMIN_ID:
-        context.user_data['state'] = 'admin_menu'
-        menu = MENU_TREE['admin_menu']
-    else:
-        context.user_data['state'] = 'main_menu'
-        menu = MENU_TREE['main_menu']
-
-    await send_message(update, context, menu['message'], menu['options'])
-
+# Основная функция для запуска бота
+async def start(update, context):
+    """Обрабатывает команду /start"""
+    # Устанавливаем состояние и отправляем стартовое сообщение
+    context.user_data['state'] = 'main_menu'
+    await send_message(update, context, "Привет! Выберите действие из меню", MENU_TREE['main_menu']['options'])
 
 def main():
-    logger.info("Запуск бота")
+    """Функция для инициализации и запуска бота"""
+    # Создаем экземпляр приложения бота с токеном
     application = Application.builder().token(TOKEN).build()
 
-    # Добавляем обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT | filters.PHOTO & ~filters.COMMAND, handle_message))
-    application.add_handler(CallbackQueryHandler(button_click))
+    # Регистрация обработчиков
+    application.add_handler(CommandHandler("start", start))  # Обработка команды /start
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Обработка сообщений
+    application.add_handler(CallbackQueryHandler(button_click))  # Обработка нажатий на inline-кнопки
 
-    logger.info("Бот успешно запущен, начало polling...")
+    # Запуск polling
+    logger.info("Бот запущен...")
     application.run_polling()
-
 
 if __name__ == '__main__':
     main()

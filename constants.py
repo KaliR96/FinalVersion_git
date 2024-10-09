@@ -4,8 +4,9 @@ import os
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 CHANNEL_ID = -1002249882445
-
 ADMIN_ID = 1238802718
+TOKEN = '7363733923:AAHKPw_fvjG2F3PBE2XP6Sj49u04uy7wpZE'
+CHANNEL_LINK = "https://t.me/+7YI7c3pWXhQwMTcy"
 
 # Цены на квадратный метр для каждого типа уборки
 CLEANING_PRICES = {
@@ -14,8 +15,6 @@ CLEANING_PRICES = {
     'Послестрой🛠': 190,
     'Мытье окон🧴': 350
 }
-
-
 
 # Пути к изображениям и текст для каждого тарифа
 CLEANING_DETAILS = {

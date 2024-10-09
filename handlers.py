@@ -1,10 +1,9 @@
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, \
-    InlineKeyboardMarkup  # Правильные импорты кнопок
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from utils import send_tariff_details  # Импорт функции из utils.py
 from menu_tree import MENU_TREE
 from constants import CLEANING_PRICES, CLEANING_DETAILS
-from utils import send_message, send_inline_message
+from utils import send_message
+from constants import CHANNEL_LINK
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,367 +21,218 @@ for tariff_name, details in CLEANING_DETAILS.items():
     }
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.message.from_user.id
-    user_state = context.user_data.get('state', 'main_menu')  # Текущее состояние пользователя или 'main_menu' по умолчанию
-    user_choice = update.message.text.strip()  # Текст сообщения от пользователя
-
-    # Логирование текущей информации для отладки
-    logger.info(f"User {user_id} in state {user_state} selected: {user_choice}")
-
-    # Главное меню
-    if user_state == 'main_menu':
-        if user_choice == 'Полезная информация📢':
-            # Переход на состояние "Полезная информация"
-            context.user_data['state'] = 'useful_info'
-            await show_useful_info(update, context)
-            return
-
-        elif user_choice == 'Тарифы🏷️':
-            # Переход на состояние "Показ тарифов"
-            context.user_data['state'] = 'show_tariffs'
-            await send_message(update, context, MENU_TREE['show_tariffs']['message'], MENU_TREE['show_tariffs']['options'])
-            return
-
-        elif user_choice == 'Отзывы💬':
-            # Переход на состояние "Отзывы"
-            context.user_data['state'] = 'reviews_menu'
-            await send_message(update, context, MENU_TREE['reviews_menu']['message'], MENU_TREE['reviews_menu']['options'])
-            return
-
-        elif user_choice == 'Связаться📞':
-            # Переход на состояние "Контакты"
-            context.user_data['state'] = 'contact_menu'
-            await send_message(update, context, MENU_TREE['contact_menu']['message'], MENU_TREE['contact_menu']['options'])
-            return
-
-        else:
-            # Если не распознано, остаёмся в главном меню
-            await send_message(update, context, "Пожалуйста, выберите опцию из меню.", MENU_TREE['main_menu']['options'])
-            return
-
-    # Меню тарифов
-    elif user_state == 'show_tariffs':
-        if user_choice in CLEANING_DETAILS:  # Проверяем, что тариф существует в данных
-            # Отправляем детали выбранного тарифа
-            await send_tariff_details(update, context, user_choice)
-            return
-
-        elif user_choice == 'Назад🔙':
-            # Возврат в главное меню
-            context.user_data['state'] = 'main_menu'
-            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
-            return
-
-    # Меню отзывов
-    elif user_state == 'reviews_menu':
-        if user_choice == 'Написать отзыв📝':
-            # Переход на состояние написания отзыва
-            context.user_data['state'] = 'write_review'
-            await send_message(update, context, "Пожалуйста, напишите ваш отзыв:", [['Назад🔙']])
-            return
-
-        elif user_choice == 'Назад🔙':
-            # Возврат в главное меню
-            context.user_data['state'] = 'main_menu'
-            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
-            return
-
-    # Написание отзыва
-    elif user_state == 'write_review':
-        review_text = update.message.text  # Считываем текст отзыва
-        if review_text:
-            # Обработка отзыва и возврат в главное меню
-            review_data = {'review': review_text, 'user_id': user_id, 'approved': False}
-            context.application.bot_data.setdefault('reviews', []).append(review_data)
-            await send_message(update, context, "Спасибо за ваш отзыв! Он будет опубликован после модерации.", MENU_TREE['main_menu']['options'])
-            context.user_data['state'] = 'main_menu'
-            return
-
-    # Калькулятор услуг
-    elif user_state == 'calculator_menu':
-        if user_choice in CLEANING_PRICES:
-            # Переход на состояние ввода квадратных метров
-            context.user_data['selected_tariff'] = user_choice
-            context.user_data['state'] = 'enter_square_meters'
-            await send_message(update, context, "Введите количество квадратных метров:", [['Назад🔙']])
-            return
-
-    # Ввод метража для тарифа
-    elif user_state == 'enter_square_meters':
-        await handle_square_meters_input(update, context)  # Обрабатываем ввод метража
-        return
-
-    # Если состояние не распознано, возвращаемся в главное меню
-    else:
-        logger.warning(f"Неизвестное состояние: {user_state}. Возврат в главное меню.")
-        context.user_data['state'] = 'main_menu'
-        await send_message(update, context, "Пожалуйста, выберите опцию из меню.", MENU_TREE['main_menu']['options'])
-
-
-
-async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query  # Получаем объект нажатой кнопки
-    await query.answer()  # Обязательный вызов для завершения запроса
-
-    # Получаем текущее состояние пользователя
+    user_message = update.message.text.strip()  # Удаляем лишние символы
     user_state = context.user_data.get('state', 'main_menu')
 
-    # Логируем текущее состояние и данные кнопки
-    logger.info(f"User {query.from_user.id} in state {user_state} clicked button with data: {query.data}")
+    logger.info(f"User state: {user_state}, User message: {user_message}")
 
-    # Пример: если нажата кнопка с номером телефона
-    if query.data == "show_phone_number":
-        await query.message.reply_text("Ваш номер телефона: +79956124581")
-        return
-
-    # Пример: если пользователь в меню модерации отзывов
-    if user_state == 'moderation_menu':
-        # Данные callback_data в формате 'action_message_id', например: 'publish_12345' или 'delete_12345'
-        action, message_id = query.data.split('_')
-
-        pending_reviews = context.application.bot_data.get('reviews', [])
-        review = next((r for r in pending_reviews if str(r['message_id']) == message_id), None)
-
-        if review:
-            if action == 'delete':
-                # Удаление отзыва
-                review['deleted'] = True
-                await query.edit_message_text(text="Отзыв был удален.")
-                context.application.bot_data['reviews'].remove(review)
-                logger.info(f"Review {message_id} deleted by admin {query.from_user.id}.")
-            elif action == 'publish':
-                # Публикация отзыва
-                review['approved'] = True
-                await publish_review(context, review)  # Опубликование отзыва
-                await query.edit_message_text(text="Отзыв успешно опубликован.")
-                logger.info(f"Review {message_id} published by admin {query.from_user.id}.")
-
-        # Проверка оставшихся отзывов для модерации
-        remaining_reviews = [r for r in pending_reviews if not r.get('approved', False) and not r.get('deleted', False)]
-        if not remaining_reviews:
-            await context.bot.send_message(chat_id=query.message.chat_id, text="Все отзывы обработаны.")
-            context.user_data['state'] = 'admin_menu'
-            return
-
-        return
-
-    # Пример: если пользователь в состоянии "Связаться"
-    if user_state == 'contact':
-        if query.data == "show_phone_number":
-            # Отправка номера телефона
-            await query.message.reply_text("Наш контактный телефон: +79956124581")
-            return
-
-    # Если кнопка не соответствует текущему состоянию пользователя
-    await query.message.reply_text("Пожалуйста, выберите правильную опцию.")
-
-
-async def show_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Ссылка на ваш Telegram-канал или другую полезную информацию
-    channel_url = "https://t.me/your_channel"  # Замените на вашу реальную ссылку
-
-    # Создаем Inline-кнопку с ссылкой на канал
-    buttons = [[InlineKeyboardButton("Перейти в наш канал", url=channel_url)]]
-    reply_markup = InlineKeyboardMarkup(buttons)
-
-    # Отправляем сообщение с кнопкой
-    await update.message.reply_text(
-        "Посетите наш Telegram-канал, чтобы получать последние новости, акции и специальные предложения!",
-        reply_markup=reply_markup
-    )
-
-    # Логируем отправку сообщения для отладки
-    logger.info(f"Полезная информация отправлена пользователю {update.message.from_user.id}")
-
-
-async def handle_square_meters_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_choice = update.message.text.strip()
-    try:
-        # Пробуем преобразовать введенные данные в число с плавающей точкой
-        sqm = float(user_choice)
-        logger.info(f"Введенное количество квадратных метров: {sqm}")
-
-        price_per_sqm = context.user_data.get('price_per_sqm')
-        if price_per_sqm is None:
-            await send_message(update, context,
-                               'Произошла ошибка. Пожалуйста, вернитесь в главное меню и начните заново.',
-                               ['Главное меню🔙'])
-            context.user_data['state'] = 'main_menu'
-            return
-
-        # Считаем итоговую стоимость
-        total_cost = price_per_sqm * sqm
-        total_cost = max(total_cost, 1500)  # Минимальная стоимость 1500 руб.
-
-        result_message = (
-            f'Стоимость вашей уборки: {total_cost:.2f} руб. за {sqm:.2f} кв.м.'
-        )
-        await send_message(update, context, result_message, MENU_TREE['calculate_result']['options'])
-
-        # Сохраняем площадь и стоимость для дальнейшего использования
-        context.user_data['square_meters'] = sqm
-        context.user_data['total_cost'] = total_cost
-
-        # Проверяем выбранный тариф и предлагаем допуслуги
-        selected_tariff = context.user_data.get('selected_tariff')
-        if selected_tariff in ['Ген.Уборка🧼', 'Повседневная🧹']:
-            await prompt_for_extras(update, context)
+    # Проверка состояния и вызов соответствующей функции
+    if user_state == 'main_menu' and user_message == 'Тарифы🏷️':
+        context.user_data['state'] = 'show_tariffs'
+        await send_message(update, context, "Выберите тариф для получения подробной информации:", MENU_TREE['show_tariffs']['options'])
+    elif user_state == 'show_tariffs':
+        await handle_show_tariffs(update, context, user_message)
+    elif user_state.startswith('detail_') and user_message == 'Калькулятор🧮':
+        # Логика обработки нажатия на "Калькулятор🧮"
+        context.user_data['state'] = 'calculator_menu'
+        await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
+    elif user_state == 'calculator_menu':
+        # Обработка выбора тарифа внутри калькулятора
+        if user_message in CLEANING_PRICES:
+            context.user_data['selected_tariff'] = user_message
+            context.user_data['state'] = 'enter_square_meters'
+            await send_message(update, context, "Введите количество квадратных метров для уборки:", MENU_TREE['enter_square_meters']['options'])
         else:
-            await complete_calculation(update, context)
+            await send_message(update, context, "Пожалуйста, выберите тариф из списка:", MENU_TREE['calculator_menu']['options'])
+    elif user_state == 'enter_square_meters':
+        await handle_enter_square_meters(update, context, user_message)
+    elif user_state == 'enter_window_panels':
+        await handle_enter_window_panels(update, context, user_message)
+    elif user_state == 'add_extras':
+        await handle_add_extras(update, context, user_message)
+    else:
+        logger.warning(f"Unknown state: {user_state}, redirecting to handle_unknown_message.")
+        await handle_unknown_message(update, context)
 
-        return  # Завершаем выполнение функции
+
+async def handle_show_tariffs(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
+    """Обрабатывает выбор тарифа пользователем."""
+
+    # Удаляем пробелы и лишние символы для точного сравнения
+    user_choice = user_choice.strip()
+
+    # Проверяем, что выбор пользователя есть в списке тарифов
+    if user_choice in CLEANING_PRICES:
+        details = CLEANING_DETAILS.get(user_choice)
+        if details:
+            try:
+                with open(details['image_path'], 'rb') as image_file:
+                    await update.message.reply_photo(photo=image_file)
+            except FileNotFoundError:
+                logger.error(f"Изображение не найдено: {details['image_path']}")
+                await update.message.reply_text("Изображение для этого тарифа временно недоступно.")
+
+            # Обновляем состояние пользователя
+            context.user_data['selected_tariff'] = user_choice
+            context.user_data['state'] = f'detail_{user_choice}'
+
+            # Отправляем подробности тарифа
+            for part in details['details_text']:
+                await update.message.reply_text(part)
+
+            await send_message(update, context, "Выберите дальнейшее действие:",
+                               MENU_TREE[f'detail_{user_choice}']['options'])
+        else:
+            await send_message(update, context, "Пожалуйста, выберите опцию из меню.",
+                               MENU_TREE['show_tariffs']['options'])
+    else:
+        await send_message(update, context, "Неизвестный тариф. Попробуйте снова.",
+                           MENU_TREE['show_tariffs']['options'])
+
+
+async def handle_enter_square_meters(update: Update, context: ContextTypes.DEFAULT_TYPE, user_input: str) -> None:
+    """Обрабатывает ввод данных квадратных метров."""
+    try:
+        square_meters = float(user_input)
+        context.user_data['square_meters'] = square_meters
+
+        selected_tariff = context.user_data.get('selected_tariff', None)
+
+        if selected_tariff in CLEANING_PRICES:
+            price_per_meter = CLEANING_PRICES[selected_tariff]
+            total_cost = price_per_meter * square_meters
+            context.user_data['total_cost'] = total_cost  # Сохраняем начальную стоимость
+            await update.message.reply_text(f"Стоимость уборки: {total_cost} руб.")
+
+        # Проверяем, выбран ли один из тарифов: Генеральная уборка или Повседневная уборка
+        if selected_tariff in ['Ген.Уборка🧼', 'Повседневная🧹']:
+            context.user_data['state'] = 'add_extras'
+            await send_message(update, context, MENU_TREE['add_extras']['message'], MENU_TREE['add_extras']['options'])
+        else:
+            # Если тариф другой, завершаем расчет
+            await update.message.reply_text(f"Итоговая стоимость уборки: {total_cost} руб.")
+            context.user_data['state'] = 'main_menu'
+            await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
 
     except ValueError:
-        logger.error(f"Некорректное количество квадратных метров: {user_choice}")
-        await send_message(update, context, 'Пожалуйста, введите корректное количество квадратных метров.',
-                           MENU_TREE['enter_square_meters']['options'])
+        await update.message.reply_text("Пожалуйста, введите корректное число для квадратных метров.")
 
 
-async def prompt_for_extras(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Список дополнительных услуг
-    extras_options = [
-        ['Глажка белья', 'Стирка белья'],
-        ['Почистить лоток', 'Уход за цветами'],
-        ['Мытье окон🧴(1 створка)'],
-        ['Главное меню🔙', 'Связаться📞']
-    ]
-
-    # Создание клавиатуры с дополнительными услугами
-    reply_markup = ReplyKeyboardMarkup(
-        extras_options, resize_keyboard=True, one_time_keyboard=True
-    )
-
-    # Сообщение пользователю с предложением выбрать дополнительные услуги
-    await update.message.reply_text(
-        "Хотите добавить дополнительные услуги?",
-        reply_markup=reply_markup
-    )
-
-    # Устанавливаем состояние для пользователя, чтобы бот знал, что он выбирает доп. услуги
-    context.user_data['state'] = 'add_extras'
-
-    # Логирование для отладки
-    logger.info(f"Пользователю {update.message.from_user.id} предложены дополнительные услуги.")
+async def handle_enter_window_panels(update: Update, context: ContextTypes.DEFAULT_TYPE, user_input: str) -> None:
+    """Обрабатывает ввод данных количества оконных створок."""
+    try:
+        num_panels = int(user_input)
+        context.user_data['window_panels'] = num_panels
+        context.user_data['state'] = 'calculate_result'
+        await send_message(update, context, MENU_TREE['calculate_result']['message'], MENU_TREE['calculate_result']['options'])
+    except ValueError:
+        await update.message.reply_text("Пожалуйста, введите корректное число для оконных створок.")
 
 
-async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, user_state: str) -> None:
-    # Получаем список отзывов, которые находятся на модерации
-    pending_reviews = context.application.bot_data.get('reviews', [])
-    # Отбираем только те отзывы, которые не опубликованы и не удалены
-    pending_reviews = [review for review in pending_reviews if
-                       not review.get('approved', False) and not review.get('deleted', False)]
-
-    # Проверяем, есть ли отзывы для модерации
-    if not pending_reviews:
-        await update.message.reply_text("Нет отзывов для модерации.")
-        context.user_data['state'] = 'admin_menu'
-        return
-
-    # Проходим по каждому отзыву и предлагаем администратору действия (опубликовать/удалить)
-    for review in pending_reviews:
-        user_name = review.get('user_name', 'Анонимный пользователь')
-        review_text = review.get('review', 'Без текста')
-
-        # Формируем сообщение с текстом отзыва
-        review_message = f"Отзыв от {user_name}:\n\n{review_text}"
-
-        # Кнопки для модерации: опубликовать или удалить отзыв
-        buttons = [
-            [InlineKeyboardButton("Опубликовать", callback_data=f"publish_{review['message_id']}")],
-            [InlineKeyboardButton("Удалить", callback_data=f"delete_{review['message_id']}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(buttons)
-
-        # Отправляем сообщение с отзывом и кнопками для действий
-        await update.message.reply_text(review_message, reply_markup=reply_markup)
-
-    # Устанавливаем состояние "moderation_menu", чтобы бот знал, что администратор находится в режиме модерации
-    context.user_data['state'] = 'moderation_menu'
-
-    # Логирование для отладки
-    logger.info(f"Администратор {update.message.from_user.id} просматривает отзывы для модерации.")
-
-
-async def publish_review(context: ContextTypes.DEFAULT_TYPE, review: dict) -> None:
-    # ID канала, куда будут публиковаться отзывы (замените на реальный ID канала)
-    review_channel_id = "@your_review_channel"
-
-    # Получаем информацию из отзыва
-    user_name = review.get('user_name', 'Анонимный пользователь')
-    review_text = review.get('review', 'Без текста')
-
-    # Формируем сообщение для публикации
-    review_message = f"<b>Отзыв от {user_name}:</b>\n\n{review_text}"
-
-    # Отправляем сообщение в канал с отзывами (включаем поддержку HTML разметки)
-    await context.bot.send_message(
-        chat_id=review_channel_id,
-        text=review_message,
-        parse_mode='HTML'  # Используем HTML для форматирования текста
-    )
-
-    # Логируем успешную публикацию
-    logger.info(f"Отзыв от {user_name} опубликован в канале {review_channel_id}.")
-
-    # Обновляем статус отзыва как "опубликованный"
-    review['approved'] = True
-
-
-def calculate_windows(price_per_panel: float, num_panels: int) -> dict:
-    # Рассчитываем общую стоимость
-    total_cost = price_per_panel * num_panels
-
-    # Проверяем минимальную стоимость (например, 1000 руб.)
-    minimum_cost = 1000  # Минимальная стоимость услуги
-    if total_cost < minimum_cost:
-        total_cost = minimum_cost
-
-    # Формируем отформатированное сообщение для пользователя
-    formatted_message = (
-        f"Вы выбрали мойку {num_panels} оконных створок.\n"
-        f"Стоимость за одну створку: {price_per_panel:.2f} руб.\n"
-        f"Итоговая стоимость мойки: {total_cost:.2f} руб."
-    )
-
-    # Возвращаем результат в виде словаря
-    return {
-        'total_cost': total_cost,
-        'formatted_message': formatted_message
+async def handle_add_extras(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
+    """Обрабатывает выбор дополнительных услуг."""
+    # Доп услуги и их стоимость
+    EXTRA_SERVICES = {
+        'Глажка белья': 600,
+        'Стирка белья': 300,
+        'Почистить лоток': 300,
+        'Уход за цветами': 200,
+        'Мытье окон(1 створка)🧴': 350
     }
 
+    # Если пользователь выбрал услугу, прибавляем её стоимость
+    if user_choice in EXTRA_SERVICES:
+        extra_cost = EXTRA_SERVICES[user_choice]
+        total_cost = context.user_data.get('total_cost', 0)  # Получаем текущую сумму
+        total_cost += extra_cost
+        context.user_data['total_cost'] = total_cost  # Сохраняем обновленную сумму
+        await update.message.reply_text(f"Добавлено: {user_choice}. Общая стоимость: {total_cost} руб.")
 
-async def complete_calculation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Получаем общую стоимость заказа из данных пользователя
-    total_cost = context.user_data.get('total_cost', 0)
-    selected_extras = context.user_data.get('selected_extras', [])
+        # Продолжаем предлагать другие доп услуги
+        await send_message(update, context, "Выберите дополнительные услуги или завершите расчет:",
+                           MENU_TREE['add_extras']['options'])
 
-    # Формируем сообщение с итоговой стоимостью
-    final_message = f"Итоговая стоимость услуг: {total_cost:.2f} руб."
+    # Если пользователь выбрал "Связаться" или "Главное меню", выводим итоговую сумму
+    elif user_choice == 'Связаться📞' or user_choice == 'Главное меню🔙':
+        total_cost = context.user_data.get('total_cost', 0)
+        await update.message.reply_text(f"Итоговая стоимость уборки: {total_cost} руб.")
+        context.user_data['state'] = 'main_menu'  # Возвращаемся в главное меню
+        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
 
-    if selected_extras:
-        # Если есть дополнительные услуги, добавляем их в сообщение
-        extras_list = ", ".join(selected_extras)
-        final_message += f"\nВы выбрали следующие дополнительные услуги: {extras_list}"
+    # Если пользователь выбрал некорректную опцию
+    else:
+        await send_message(update, context, "Пожалуйста, выберите услугу из списка.",
+                           MENU_TREE['add_extras']['options'])
 
-    # Отправляем сообщение с итоговой стоимостью
-    await update.message.reply_text(final_message)
 
-    # Формируем inline-кнопки для завершения заказа
-    buttons = [
-        [InlineKeyboardButton("Связаться📞", url="https://t.me/your_contact")],
-        [InlineKeyboardButton("WhatsApp", url="https://wa.me/your_number")],
-        [InlineKeyboardButton("Показать номер телефона", callback_data="show_phone_number")]
-    ]
-    reply_markup = InlineKeyboardMarkup(buttons)
+async def handle_unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает неизвестные команды и сообщения."""
+    await send_message(update, context, "Извините, я не отправлю это сообщение. Попробуйте выбрать опцию СВЯЗАТЬСЯ")
 
-    # Отправляем сообщение с кнопками для связи
-    await send_inline_message(update, context, "Чтобы завершить заказ, свяжитесь с нами через Telegram или WhatsApp:",
-                              buttons)
+async def handle_reviews_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
+    """Обрабатывает работу с отзывами."""
+    if user_choice in MENU_TREE['reviews_menu']['next_state']:
+        next_state = MENU_TREE['reviews_menu']['next_state'][user_choice]
+        context.user_data['state'] = next_state
+        await send_message(update, context, MENU_TREE[next_state]['message'], MENU_TREE[next_state]['options'])
+    else:
+        await send_message(update, context, "Выберите опцию для работы с отзывами.", MENU_TREE['reviews_menu']['options'])
 
-    # Логируем завершение расчета
-    logger.info(
-        f"Расчет завершен для пользователя {update.message.from_user.id} с итоговой стоимостью: {total_cost:.2f} руб.")
-
-    # Сбрасываем состояние пользователя на главное меню
+async def handle_write_review(update: Update, context: ContextTypes.DEFAULT_TYPE, user_input: str) -> None:
+    """Обрабатывает написание отзыва."""
+    # Логика для сохранения отзыва
+    await update.message.reply_text("Спасибо за ваш отзыв!")
     context.user_data['state'] = 'main_menu'
+    await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+
+async def handle_view_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
+    """Обрабатывает просмотр отзывов."""
+    if user_choice == 'Перейти к каналу':
+        await update.message.reply_text("Вот ссылка на наш канал: https://t.me/your_channel")
+    elif user_choice == 'Главное меню🔙':
+        context.user_data['state'] = 'main_menu'
+        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+    else:
+        await send_message(update, context, "Выберите действие для работы с отзывами.", MENU_TREE['view_reviews']['options'])
+
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
+    """Обрабатывает контактную информацию."""
+    if user_choice == 'Главное меню🔙':
+        context.user_data['state'] = 'main_menu'
+        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+    else:
+        await send_message(update, context, "Связаться со мной вы можете через следующие каналы.", MENU_TREE['contact']['options'])
+
+async def handle_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice: str) -> None:
+    """Обрабатывает полезную информацию и перенаправляет в канал."""
+
+    if user_choice == 'Главное меню🔙':
+        # Возврат в главное меню
+        context.user_data['state'] = 'main_menu'
+        await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
+    else:
+        # Отправляем сообщение с приглашением посетить канал и ссылкой
+        await send_message(update, context,
+                           f"Посетите наш канал для получения последних новостей, акций и розыгрышей!\n\n{CHANNEL_LINK}",
+                           MENU_TREE['useful_info']['options'])
+
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            query = update.callback_query
+            await query.answer()
+
+            user_state = context.user_data.get('state', 'main_menu')
+
+            if user_state in MENU_TREE:
+                next_state = MENU_TREE[user_state]['next_state'].get(query.data, user_state)
+                context.user_data['state'] = next_state
+
+                menu = MENU_TREE[next_state]
+                await send_message(update, context, menu['message'], menu['options'])
+            else:
+                await send_message(update, context, "Неизвестная команда. Попробуйте снова.")
+
