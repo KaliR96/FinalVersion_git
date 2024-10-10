@@ -21,7 +21,7 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
         context.user_data['state'] = 'main_menu'
 
-
+#sd
 # Функция для модерации отзывов
 async def moderate_reviews(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Модерирует отзывы."""

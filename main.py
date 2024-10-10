@@ -11,6 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+#sdfasdfsdf
 # Основная функция для запуска бота
 async def start(update, context):
     """Обрабатывает команду /start для пользователя и администратора"""

@@ -10,7 +10,7 @@ from admin import moderate_reviews, save_review_to_bot_data
 import logging
 
 logger = logging.getLogger(__name__)
-
+#aWWE
 # Динамическое добавление состояний для каждого тарифа с кнопкой "Калькулятор🧮"
 for tariff_name, details in CLEANING_DETAILS.items():
     MENU_TREE[f'detail_{tariff_name}'] = {
