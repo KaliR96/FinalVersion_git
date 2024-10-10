@@ -1,31 +1,34 @@
 import logging
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 # Логирование
 logger = logging.getLogger(__name__)
 
 # Функция для отправки сообщений
-async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options=None):
-    """Отправляет сообщение пользователю с заданными опциями (если они есть)."""
+async def send_message(update, context, message, options=None):
+    """Отправляет сообщение с кнопками, если они есть."""
     if options:
-        if isinstance(options[0], list):  # Проверяем, что `options` это список списков
-            reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
-        else:
-            # Если `options` - это просто список, преобразуем его в список списков
-            reply_markup = ReplyKeyboardMarkup([options], resize_keyboard=True, one_time_keyboard=True)
+        reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
+    else:
+        reply_markup = None
 
+    if update.message:
+        # Если это обычное сообщение
         await update.message.reply_text(message, reply_markup=reply_markup)
     else:
-        # Если опций нет, отправляем просто сообщение без кнопок
-        await update.message.reply_text(message)
+        logger.warning("Не удалось отправить сообщение. Отсутствует 'message' в update.")
 
 
 # Функция для отправки сообщения с inline-кнопками
-async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, buttons: list) -> None:
-    logger.info("Функция send_inline_message вызвана.")  # Логируем вызов функции
-    keyboard = InlineKeyboardMarkup(buttons)
-    await update.message.reply_text(message, reply_markup=keyboard)
+async def send_inline_menu(update, context, message, options):
+    buttons = [[InlineKeyboardButton(text=option, callback_data=option)] for option in options]
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    if update.message:
+        await update.message.reply_text(message, reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
 
 # Функция для расчета стоимости уборки (оригинальное название - calculate)
 def calculate(price_per_sqm, square_meters):
