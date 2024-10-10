@@ -43,16 +43,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 context.user_data['state'] = 'admin_menu'
                 await send_message(update, context, MENU_TREE['admin_menu']['message'],
                                    MENU_TREE['admin_menu']['options'])
+            elif user_message == 'Назад' and user_state == 'moderation_menu':
+                # Возвращаем администратора в админ меню из модерации
+                context.user_data['state'] = 'admin_menu'
+                await send_message(update, context, MENU_TREE['admin_menu']['message'], MENU_TREE['admin_menu']['options'])
             else:
                 await send_message(update, context, "Неизвестная команда для админа.", [["Назад"]])
             return
 
-        if user_message == 'Назад':
-            if user_state == 'moderation_menu':
-                context.user_data['state'] = 'admin_menu'
-                await send_message(update, context, MENU_TREE['admin_menu']['message'],
-                                   MENU_TREE['admin_menu']['options'])
-                return
+        # Обработка кнопки "Назад" в состоянии модерации
+        if user_message == 'Назад' and user_state == 'moderation_menu':
+            context.user_data['state'] = 'admin_menu'
+            await send_message(update, context, MENU_TREE['admin_menu']['message'], MENU_TREE['admin_menu']['options'])
+            return
 
         # Обработка меню отзывов
         if user_state == 'reviews_menu' and user_message == 'Написать отзыв':
@@ -107,7 +110,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
             return
 
-
     elif update.callback_query:
         query = update.callback_query
         await query.answer()  # Ответ на callback для индикации
@@ -120,7 +122,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             menu = MENU_TREE.get(context.user_data.get('state'), MENU_TREE['main_menu'])
             await query.edit_message_text(text=menu['message'], reply_markup=InlineKeyboardMarkup(menu['options']))
-
 
 # Обработка callback для инлайн-кнопки "Показать номер"
 async def show_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
