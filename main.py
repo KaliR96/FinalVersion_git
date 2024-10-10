@@ -4,7 +4,6 @@ from handlers import show_phone_number, handle_message, button_click  # Обра
 from utils import send_message  # Импортируем утилиты, если нужно для вызовов
 from constants import TOKEN, ADMIN_ID  # Импортируем токен и ID администратора для бота
 from menu_tree import MENU_TREE
-
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
