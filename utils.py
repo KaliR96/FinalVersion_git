@@ -8,16 +8,27 @@ logger = logging.getLogger(__name__)
 # Функция для отправки сообщений
 async def send_message(update, context, message, options=None):
     """Отправляет сообщение с кнопками, если они есть."""
+    # Создание клавиатуры с кнопками, если они есть, иначе удаление клавиатуры
     if options:
         reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
     else:
         reply_markup = ReplyKeyboardRemove()  # Удаление кнопок, если их нет
 
+    # Если сообщение пришло в обычной форме
     if update.message:
-        # Если это обычное сообщение
+        # Логируем, что сообщение отправляется с определенными параметрами
+        logger.info(f"Отправка сообщения: {message}, Кнопки: {options}")
         await update.message.reply_text(message, reply_markup=reply_markup)
+
+    # Если сообщение пришло через callback_query (инлайн-кнопка)
+    elif update.callback_query:
+        logger.info(f"Отправка сообщения через callback: {message}, Кнопки: {options}")
+        await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
+        await update.callback_query.answer()  # Закрываем callback
+
+    # Если нет сообщения или callback, то логируем ошибку
     else:
-        logger.warning("Не удалось отправить сообщение. Отсутствует 'message' в update.")
+        logger.warning("Не удалось отправить сообщение. Отсутствует 'message' или 'callback_query' в update.")
 
 
 # Функция для отправки сообщения с inline-кнопками

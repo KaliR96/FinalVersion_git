@@ -56,6 +56,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Сохраняем отзыв с полным набором аргументов (включая медиафайлы)
             await save_review_to_bot_data(context, user_id, user_name, message_id, review_text, media_file_ids)
 
+            # Логируем успешное сохранение отзыва
+            logger.info(f"Отзыв от {user_name} сохранен с медиафайлами {media_file_ids}.")
+
             # Отправляем подтверждение пользователю
             await send_message(update, context, "Ваш отзыв отправлен на модерацию. Спасибо!", [["Главное меню🔙"]])
 
@@ -69,7 +72,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await send_message(update, context, "Пожалуйста, напишите ваш отзыв💬:")
             return
 
-        # Глобальная обработка кнопки "Связаться📞" независимо от состояния
+        # Обработка других команд
         if user_message == 'Связаться📞':
             keyboard = [
                 [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
@@ -92,39 +95,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await send_message(update, context, MENU_TREE['main_menu']['message'], MENU_TREE['main_menu']['options'])
             return
 
-        # Глобальная обработка кнопки "Калькулятор🧮"
-        elif user_message == 'Калькулятор🧮':
-            context.user_data['state'] = 'calculator_menu'
-            await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
-            return
-
-        # Остальные состояния обрабатываются как обычно
-        if user_state == 'main_menu' and user_message == 'Тарифы🏷️':
-            context.user_data['state'] = 'show_tariffs'
-            await send_message(update, context, "Выберите тариф для получения подробной информации:", MENU_TREE['show_tariffs']['options'])
-        elif user_state == 'show_tariffs':
-            await handle_show_tariffs(update, context, user_message)
-        elif user_state.startswith('detail_') and user_message == 'Калькулятор🧮':
-            context.user_data['state'] = 'calculator_menu'
-            await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
-        elif user_state == 'calculator_menu':
-            # Обработка выбора тарифа внутри калькулятора
-            if user_message in CLEANING_PRICES:
-                context.user_data['selected_tariff'] = user_message
-                context.user_data['state'] = 'enter_square_meters'
-                await send_message(update, context, "Введите количество квадратных метров для уборки:", MENU_TREE['enter_square_meters']['options'])
-            else:
-                await send_message(update, context, "Пожалуйста, выберите тариф из списка:", MENU_TREE['calculator_menu']['options'])
-        elif user_state == 'enter_square_meters':
-            await handle_enter_square_meters(update, context, user_message)
-        elif user_state == 'enter_window_panels':
-            await handle_enter_window_panels(update, context, user_message)
-        elif user_state == 'add_extras':
-            await handle_add_extras(update, context, user_message)
-        else:
-            logger.warning(f"Unknown state: {user_state}, redirecting to handle_unknown_message.")
-            await handle_unknown_message(update, context)
-
     # Проверка на наличие callback-запроса
     elif update.callback_query:
         query = update.callback_query
@@ -136,15 +106,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Проверка, админ ли пользователь
         if user_id == ADMIN_ID:
             if query.data == 'Модерация':
+                logger.info("Запущена модерация отзывов.")
                 await moderate_reviews(update, context)
             elif query.data == 'Админ меню':
                 context.user_data['state'] = 'admin_menu'
-                await send_message(update, context, MENU_TREE['admin_menu']['message'], MENU_TREE['admin_menu']['options'])
+                await send_message(update, context, MENU_TREE['admin_menu']['message'],
+                                   MENU_TREE['admin_menu']['options'])
             else:
                 await send_message(update, context, "Неизвестная команда для админа.", [["Назад"]])
             return
 
-        # Обработка кнопки "Связаться📞" независимо от состояния
+        # Обработка callback-запроса для "Связаться📞"
         if query.data == 'Связаться📞':
             keyboard = [
                 [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
@@ -154,11 +126,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text("Связаться📞 со мной вы можете через следующие каналы:", reply_markup=reply_markup)
             context.user_data['state'] = 'contact'
-            return
-
-        # Замена Inline-кнопок на вызов функции с Reply-кнопками для "Отзывы💬"
-        elif query.data == 'Отзывы💬':
-            await handle_reviews_menu(update, context)
             return
 
         # Глобальная обработка callback-запроса для других состояний
