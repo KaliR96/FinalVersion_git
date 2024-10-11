@@ -5,8 +5,7 @@ from constants import CLEANING_PRICES, CLEANING_DETAILS, CHANNEL_ID
 from utils import send_message
 from constants import CHANNEL_LINK, ADMIN_ID
 from telegram import InputMediaPhoto
-from admin import moderate_reviews
-
+from admin import moderate_reviews, save_review_to_bot_data
 
 import logging
 
@@ -24,66 +23,68 @@ for tariff_name, details in CLEANING_DETAILS.items():
         }
     }
 
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-
-    # Проверка, является ли запрос текстовым сообщением или callback-запросом
+    # Проверка, является ли запрос текстовым сообщением или содержит медиафайлы
     if update.message:
-        # Это текстовое сообщение
         user_id = update.message.from_user.id
-        user_message = update.message.text.strip()
+        user_name = update.message.from_user.username or update.message.from_user.first_name
+        message_id = update.message.message_id
+        user_message = update.message.text.strip() if update.message.text else ""
         user_state = context.user_data.get('state', 'main_menu')
 
-        logger.info(f"User state: {user_state}, User message: {user_message}")
+        media_file_ids = []
 
-        # Проверка, админ ли пользователь
-        if user_id == ADMIN_ID:
-            if user_message == 'Модерация':
-                await moderate_reviews(update, context)
-            elif user_message == 'Админ меню':
-                context.user_data['state'] = 'admin_menu'
-                await send_message(update, context, MENU_TREE['admin_menu']['message'],
-                                   MENU_TREE['admin_menu']['options'])
-            else:
-                await send_message(update, context, "Неизвестная команда для админа.",
-                                   MENU_TREE['admin_menu']['options'])
+        # Проверка на наличие фотографий в сообщении
+        if update.message.photo:
+            for photo in update.message.photo:
+                media_file_ids.append(photo.file_id)
+
+        # Проверка на наличие других медиафайлов (например, видео, документы и т.д.)
+        if update.message.document:
+            media_file_ids.append(update.message.document.file_id)
+
+        # Проверка на наличие видео
+        if update.message.video:
+            media_file_ids.append(update.message.video.file_id)
+
+        logger.info(f"User state: {user_state}, User message: {user_message}, Media files: {media_file_ids}")
+
+        # Проверка состояния и сохранение отзыва
+        if user_state == 'writing_review':
+            review_text = user_message  # Текст отзыва - это сообщение пользователя
+
+            # Сохраняем отзыв с полным набором аргументов (включая медиафайлы)
+            await save_review_to_bot_data(context, user_id, user_name, message_id, review_text, media_file_ids)
+
+            # Отправляем подтверждение пользователю
+            await send_message(update, context, "Ваш отзыв отправлен на модерацию. Спасибо!", [["Главное меню🔙"]])
+
+            context.user_data['state'] = 'main_menu'  # Возвращаем пользователя в главное меню
+            return
+
+        # Проверка на обычные текстовые сообщения
+        if user_state == 'reviews_menu' and user_message == 'Написать отзыв':
+            # Переводим пользователя в состояние написания отзыва
+            context.user_data['state'] = 'writing_review'
+            await send_message(update, context, "Пожалуйста, напишите ваш отзыв💬:")
             return
 
         # Глобальная обработка кнопки "Связаться📞" независимо от состояния
         if user_message == 'Связаться📞':
-            # Инлайн-кнопки для контактов
             keyboard = [
                 [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
                 [InlineKeyboardButton("Telegram", url="https://t.me/kaliroom")],
                 [InlineKeyboardButton("Показать номер", callback_data="show_phone_number")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text("Связаться📞 со мной вы можете через следующие каналы:",
-                                            reply_markup=reply_markup)
+            await update.message.reply_text("Связаться📞 со мной вы можете через следующие каналы:", reply_markup=reply_markup)
             context.user_data['state'] = 'contact'
-            return  # Прерываем дальнейшую обработку после отправки сообщения
+            return
 
         # Замена Inline-кнопок на вызов функции с Reply-кнопками для "Отзывы💬"
         elif user_message == 'Отзывы💬':
-            # Вызываем функцию, которая обрабатывает меню отзывов с Reply-кнопками
             await handle_reviews_menu(update, context)
             return
-
-            # Обработка кнопки "Написать отзыв"
-        elif user_state == 'reviews_menu' and user_message == 'Написать отзыв':
-            await handle_write_review(update, context)
-            return
-
-        # Обработка кнопки "Посмотреть отзывы"
-        elif user_state == 'reviews_menu' and user_message == 'Просмотреть отзывы':
-            await handle_view_reviews(update, context)
-            return
-
-        # Обработка состояния написания отзыва
-        elif user_state == 'writing_review':
-            await handle_write_review_content(update, context, user_message)
-            return
-
 
         # Глобальная обработка кнопки "Главное меню🔙"
         elif user_message == 'Главное меню🔙':
@@ -94,31 +95,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Глобальная обработка кнопки "Калькулятор🧮"
         elif user_message == 'Калькулятор🧮':
             context.user_data['state'] = 'calculator_menu'
-            await send_message(update, context, MENU_TREE['calculator_menu']['message'],
-                               MENU_TREE['calculator_menu']['options'])
+            await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
             return
 
         # Остальные состояния обрабатываются как обычно
         if user_state == 'main_menu' and user_message == 'Тарифы🏷️':
             context.user_data['state'] = 'show_tariffs'
-            await send_message(update, context, "Выберите тариф для получения подробной информации:",
-                               MENU_TREE['show_tariffs']['options'])
+            await send_message(update, context, "Выберите тариф для получения подробной информации:", MENU_TREE['show_tariffs']['options'])
         elif user_state == 'show_tariffs':
             await handle_show_tariffs(update, context, user_message)
         elif user_state.startswith('detail_') and user_message == 'Калькулятор🧮':
             context.user_data['state'] = 'calculator_menu'
-            await send_message(update, context, MENU_TREE['calculator_menu']['message'],
-                               MENU_TREE['calculator_menu']['options'])
+            await send_message(update, context, MENU_TREE['calculator_menu']['message'], MENU_TREE['calculator_menu']['options'])
         elif user_state == 'calculator_menu':
             # Обработка выбора тарифа внутри калькулятора
             if user_message in CLEANING_PRICES:
                 context.user_data['selected_tariff'] = user_message
                 context.user_data['state'] = 'enter_square_meters'
-                await send_message(update, context, "Введите количество квадратных метров для уборки:",
-                                   MENU_TREE['enter_square_meters']['options'])
+                await send_message(update, context, "Введите количество квадратных метров для уборки:", MENU_TREE['enter_square_meters']['options'])
             else:
-                await send_message(update, context, "Пожалуйста, выберите тариф из списка:",
-                                   MENU_TREE['calculator_menu']['options'])
+                await send_message(update, context, "Пожалуйста, выберите тариф из списка:", MENU_TREE['calculator_menu']['options'])
         elif user_state == 'enter_square_meters':
             await handle_enter_square_meters(update, context, user_message)
         elif user_state == 'enter_window_panels':
@@ -129,21 +125,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logger.warning(f"Unknown state: {user_state}, redirecting to handle_unknown_message.")
             await handle_unknown_message(update, context)
 
+    # Проверка на наличие callback-запроса
     elif update.callback_query:
-        # Это callback-запрос (нажатие инлайн-кнопки)
         query = update.callback_query
+        user_id = query.from_user.id
+        user_state = context.user_data.get('state', 'main_menu')
+
         await query.answer()  # Ответ на callback для индикации
 
-        # Обработка callback-запроса для инлайн-кнопки "Показать номер"
-        if query.data == 'show_phone_number':
-            await query.edit_message_text(text="Вы можете связаться по номеру: +7 (995) 612-45-81")
-        elif query.data == 'write_review':
-            await query.edit_message_text(text="Пожалуйста, оставьте свой отзыв на нашем канале.")
-        else:
-            # Возвращение в главное меню при нажатии на инлайн-кнопку
-            menu = MENU_TREE.get(context.user_data.get('state'), MENU_TREE['main_menu'])
-            await query.edit_message_text(text=menu['message'], reply_markup=InlineKeyboardMarkup(menu['options']))
+        # Проверка, админ ли пользователь
+        if user_id == ADMIN_ID:
+            if query.data == 'Модерация':
+                await moderate_reviews(update, context)
+            elif query.data == 'Админ меню':
+                context.user_data['state'] = 'admin_menu'
+                await send_message(update, context, MENU_TREE['admin_menu']['message'], MENU_TREE['admin_menu']['options'])
+            else:
+                await send_message(update, context, "Неизвестная команда для админа.", [["Назад"]])
+            return
 
+        # Обработка кнопки "Связаться📞" независимо от состояния
+        if query.data == 'Связаться📞':
+            keyboard = [
+                [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
+                [InlineKeyboardButton("Telegram", url="https://t.me/kaliroom")],
+                [InlineKeyboardButton("Показать номер", callback_data="show_phone_number")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("Связаться📞 со мной вы можете через следующие каналы:", reply_markup=reply_markup)
+            context.user_data['state'] = 'contact'
+            return
+
+        # Замена Inline-кнопок на вызов функции с Reply-кнопками для "Отзывы💬"
+        elif query.data == 'Отзывы💬':
+            await handle_reviews_menu(update, context)
+            return
+
+        # Глобальная обработка callback-запроса для других состояний
+        else:
+            menu = MENU_TREE.get(user_state, MENU_TREE['main_menu'])
+            await query.edit_message_text(text=menu['message'], reply_markup=InlineKeyboardMarkup(menu['options']))
 
 # Обработка callback для инлайн-кнопки "Показать номер"
 async def show_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

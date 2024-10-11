@@ -1,6 +1,6 @@
 import logging
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+
 
 # Логирование
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ async def send_message(update, context, message, options=None):
     if options:
         reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
     else:
-        reply_markup = None
+        reply_markup = ReplyKeyboardRemove()  # Удаление кнопок, если их нет
 
     if update.message:
         # Если это обычное сообщение
