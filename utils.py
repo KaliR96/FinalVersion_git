@@ -1,104 +1,48 @@
-import logging
-from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+# utils.py
 
+import os
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from config import logger, BASE_DIR
 
-# Логирование
-logger = logging.getLogger(__name__)
-
-# Функция для отправки сообщений
-async def send_message(update, context, message, options=None):
-    """Отправляет сообщение с кнопками, если они есть."""
-    # Создание клавиатуры с кнопками, если они есть, иначе удаление клавиатуры
-    if options:
+# Функция для отправки сообщения с кнопками
+async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options: list) -> None:
+    if isinstance(options[0], list):
         reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
     else:
-        reply_markup = ReplyKeyboardRemove()  # Удаление кнопок, если их нет
+        reply_markup = ReplyKeyboardMarkup([options], resize_keyboard=True, one_time_keyboard=True)
 
-    # Если сообщение пришло в обычной форме
-    if update.message:
-        # Логируем, что сообщение отправляется с определенными параметрами
-        logger.info(f"Отправка сообщения: {message}, Кнопки: {options}")
-        await update.message.reply_text(message, reply_markup=reply_markup)
+    logger.info(f"Отправка сообщения с текстом: {message} и состоянием: {context.user_data.get('state', 'main_menu')}")
 
-    # Если сообщение пришло через callback_query (инлайн-кнопка)
-    elif update.callback_query:
-        logger.info(f"Отправка сообщения через callback: {message}, Кнопки: {options}")
-        await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
-        await update.callback_query.answer()  # Закрываем callback
-
-    # Если нет сообщения или callback, то логируем ошибку
-    else:
-        logger.warning("Не удалось отправить сообщение. Отсутствует 'message' или 'callback_query' в update.")
-
+    await update.message.reply_text(message, reply_markup=reply_markup)
 
 # Функция для отправки сообщения с inline-кнопками
-async def send_inline_menu(update, context, message, options):
-    buttons = [[InlineKeyboardButton(text=option, callback_data=option)] for option in options]
-    reply_markup = InlineKeyboardMarkup(buttons)
+async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, buttons: list) -> None:
+    keyboard = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(message, reply_markup=keyboard)
+    logger.info("Отправлено сообщение с кнопками: %s", message)
 
-    if update.message:
-        await update.message.reply_text(message, reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.message.reply_text(message, reply_markup=reply_markup)
-
-# Функция для расчета стоимости уборки (оригинальное название - calculate)
-def calculate(price_per_sqm, square_meters):
-    """Рассчитывает стоимость уборки на основе цены за квадратный метр и общей площади."""
-    total_cost = price_per_sqm * square_meters
-
-    # Проверка минимальной стоимости
-    if total_cost < 1000:
-        total_cost = 1000
-        formatted_message = (
-            f'Стоимость уборки: 1000.00 руб.\n'
-            'Это минимальная стоимость заказа.'
-        )
-    else:
-        formatted_message = f'Стоимость уборки: {total_cost:.2f} руб.'
-
-    return {
-        'total_cost': total_cost,
-        'formatted_message': formatted_message
+# Функция для получения пути к изображению по имени тарифа
+def get_image_path(tariff_name):
+    image_files = {
+        'Ген.Уборка🧼': 'general.jpg',
+        'Повседневная🧹': 'vacuumcat.png',
+        'Послестрой🛠': 'build.jpg',
+        'Мытье окон🧴': 'window.jpg'
     }
 
-# Функция для расчета стоимости мытья окон
-def calculate_windows(price_per_panel, num_panels):
-    """Рассчитывает стоимость мытья окон на основе количества створок и цены за створку."""
-    total_cost = price_per_panel * num_panels
+    image_file = image_files.get(tariff_name)
+    if not image_file:
+        raise ValueError(f"Изображение не найдено для тарифа: {tariff_name}")
 
-    # Проверка минимальной стоимости
-    if total_cost < 1500:
-        total_cost = 1500
-        formatted_message = (
-            f'Стоимость мытья окон: 1500.00 руб.\n'
-            'Это минимальная стоимость заказа.'
-        )
-    else:
-        formatted_message = f'Стоимость мытья окон: {total_cost:.2f} руб. за {num_panels} створок(и).'
+    return os.path.join(BASE_DIR, 'img', image_file)
 
-    return {
-        'total_cost': total_cost,
-        'formatted_message': formatted_message
-    }
+# Функция для получения описания тарифа
+def get_description(tariff_name):
+    from data import CLEANING_DETAILS
 
+    details = CLEANING_DETAILS.get(tariff_name)
+    if not details:
+        raise ValueError(f"Описание не найдено для тарифа: {tariff_name}")
 
-
-# async def send_tariff_details(update: Update, context: ContextTypes.DEFAULT_TYPE, tariff: str) -> None:
-#     tariff_details = CLEANING_DETAILS.get(tariff)
-#
-#     if not tariff_details:
-#         await update.message.reply_text("Извините, информация о тарифе не найдена.")
-#         return
-#
-#     # Отправляем изображение тарифа
-#     image_path = tariff_details['image_path']
-#     if os.path.exists(image_path):
-#         with open(image_path, 'rb') as image_file:
-#             await context.bot.send_photo(chat_id=update.message.chat_id, photo=InputFile(image_file))
-#     else:
-#         await update.message.reply_text("Изображение не найдено.")
-#
-#     # Отправляем текстовые детали тарифа
-#     for detail in tariff_details['details_text']:
-#         await update.message.reply_text(detail)
-
+    return details['details_text']
