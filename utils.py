@@ -1,19 +1,15 @@
-# utils.py
-
-import os
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-from config import logger, BASE_DIR
+from config import logger
+from data import CLEANING_PRICES
 
-# Функция для отправки сообщения с кнопками
+# Функция для отправки сообщения с логированием
 async def send_message(update: Update, context: ContextTypes.DEFAULT_TYPE, message: str, options: list) -> None:
     if isinstance(options[0], list):
         reply_markup = ReplyKeyboardMarkup(options, resize_keyboard=True, one_time_keyboard=True)
     else:
         reply_markup = ReplyKeyboardMarkup([options], resize_keyboard=True, one_time_keyboard=True)
-
     logger.info(f"Отправка сообщения с текстом: {message} и состоянием: {context.user_data.get('state', 'main_menu')}")
-
     await update.message.reply_text(message, reply_markup=reply_markup)
 
 # Функция для отправки сообщения с inline-кнопками
@@ -22,27 +18,28 @@ async def send_inline_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(message, reply_markup=keyboard)
     logger.info("Отправлено сообщение с кнопками: %s", message)
 
-# Функция для получения пути к изображению по имени тарифа
-def get_image_path(tariff_name):
-    image_files = {
-        'Ген.Уборка🧼': 'general.jpg',
-        'Повседневная🧹': 'vacuumcat.png',
-        'Послестрой🛠': 'build.jpg',
-        'Мытье окон🧴': 'window.jpg'
+# Функция для расчета стоимости уборки
+def calculate(price_per_sqm, sqm):
+    total_cost = price_per_sqm * sqm
+    if total_cost < 1500:
+        total_cost = 1500
+        formatted_message = 'Стоимость вашей уборки: 1500.00 руб.\nЭто минимальная стоимость заказа.'
+    else:
+        formatted_message = f'Стоимость вашей уборки: {total_cost:.2f} руб.'
+    return {
+        'total_cost': total_cost,
+        'formatted_message': formatted_message
     }
 
-    image_file = image_files.get(tariff_name)
-    if not image_file:
-        raise ValueError(f"Изображение не найдено для тарифа: {tariff_name}")
-
-    return os.path.join(BASE_DIR, 'img', image_file)
-
-# Функция для получения описания тарифа
-def get_description(tariff_name):
-    from data import CLEANING_DETAILS
-
-    details = CLEANING_DETAILS.get(tariff_name)
-    if not details:
-        raise ValueError(f"Описание не найдено для тарифа: {tariff_name}")
-
-    return details['details_text']
+# Функция для расчета стоимости мытья окон
+def calculate_windows(price_per_panel, num_panels):
+    total_cost = price_per_panel * num_panels
+    if total_cost < 1500:
+        total_cost = 1500
+        formatted_message = 'Стоимость мытья окон: 1500.00 руб.\nЭто минимальная стоимость заказа.'
+    else:
+        formatted_message = f'Стоимость мытья окон: {total_cost:.2f} руб. за {num_panels} створок(и).'
+    return {
+        'total_cost': total_cost,
+        'formatted_message': formatted_message
+    }
