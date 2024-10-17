@@ -1,20 +1,24 @@
 import requests
 
-# Ваш Google Analytics Tracking ID
-GA_TRACKING_ID = 'G-WY3084MYCK'  # Замените на ваш ID
+# Ваш Google Analytics Tracking ID и API секрет
+GA_MEASUREMENT_ID = 'G-WY3084MYCK'
+API_SECRET = 'kLplxR5cRKuwGEy9_qj1KQ'
 
-# Функция для отправки события в Google Analytics
 def send_event_to_ga(category, action, label):
     data = {
-        'v': '1',  # Версия протокола
-        'tid': GA_TRACKING_ID,  # Ваш Tracking ID
-        'cid': '555',  # Уникальный идентификатор клиента (можно генерировать или использовать user_id)
-        't': 'event',  # Тип запроса - событие
-        'ec': category,  # Категория события
-        'ea': action,  # Действие события
-        'el': label,  # Ярлык события
+        'client_id': '555',  # Уникальный идентификатор клиента (например, user_id)
+        'events': [{
+            'name': 'page_view',  # Используйте 'page_view' для отслеживания просмотров страниц
+            'params': {
+                'page_title': category,  # Название страницы или экрана
+                'page_location': action,  # URL страницы или экрана
+                'page_path': label  # Путь к странице
+            }
+        }]
     }
-    response = requests.post('https://www.google-analytics.com/collect', data=data)
+    url = f'https://www.google-analytics.com/mp/collect?measurement_id={GA_MEASUREMENT_ID}&api_secret={API_SECRET}'
+    response = requests.post(url, json=data)
+
     if response.status_code == 200:
         print(f"Событие отправлено в Google Analytics: {response.status_code}")
     else:
