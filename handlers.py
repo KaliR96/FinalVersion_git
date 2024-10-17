@@ -3,8 +3,8 @@ from telegram.ext import ContextTypes
 from config import ADMIN_ID, CHANNEL_ID, logger
 from data import CLEANING_PRICES, CLEANING_DETAILS
 from menu import MENU_TREE
-from utils import send_message, send_inline_message, calculate, calculate_windows
-import os
+from utils import send_message, send_inline_message, calculate_windows
+from analytics import send_event_to_ga
 
 
 # Пример отправки сообщения с логированием
@@ -413,6 +413,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     query = update.callback_query
     await query.answer()
 
+    send_event_to_ga('User', 'ButtonClick', f'Button: {query.data}')
+
+    await query.edit_message_text(text=f"Вы нажали: {query.data}")
+
     user_state = context.user_data.get('state', 'main_menu')
 
     if query.data == "show_phone_number":
@@ -463,6 +467,10 @@ async def show_useful_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 # Функция обработки команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
+    username = update.message.from_user.username
+
+    send_event_to_ga('User', 'Start', f'User: {username}, ID: {user_id}')
+
     if user_id == ADMIN_ID:
         context.user_data['state'] = 'admin_menu'
         menu = MENU_TREE['admin_menu']
