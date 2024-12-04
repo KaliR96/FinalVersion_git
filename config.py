@@ -16,7 +16,7 @@ CHANNEL_ID = -1002249882445
 ADMIN_ID = 1238802718  # Замените на ваш реальный Telegram ID
 
 # Токен вашего бота
-TOKEN = '7363733923:AAHKPw_fvjG2F3PBE2XP6Sj49u04uy7wpZE'  # Укажите токен вашего бота
+TOKEN = '7363733923:AAGoAayjs1jGUiQqejokKgfRAVuDOtr8MHU'  # Укажите токен вашего бота
 
 # Путь к директории, где находится текущий файл
 base_dir = os.path.dirname(os.path.abspath(__file__))
