@@ -4,6 +4,7 @@ from handlers import start, handle_message, button_click
 from analytics import send_event_to_ga
 
 
+
 def main():
     logger.info("Запуск бота")
     send_event_to_ga(

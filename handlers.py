@@ -314,6 +314,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             ]
             await send_inline_message(update, context, MENU_TREE['contact']['message'], buttons)
 
+
         # Если пользователь выбрал "В начало", то сбрасываем процесс и возвращаемся в главное меню
         elif user_choice == 'Главное меню🔙':
             # Рассчитываем общую стоимость

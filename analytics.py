@@ -36,6 +36,7 @@ def send_event_to_ga(user_id, category, action, label, username=None):
     # Формируем URL для отправки данных в Google Analytics
     url = f'https://www.google-analytics.com/debug/mp/collect?measurement_id={GA_MEASUREMENT_ID}&api_secret={API_SECRET}'
 
+
     # Отправляем POST-запрос с данными
     response = requests.post(url, json=data)
 
