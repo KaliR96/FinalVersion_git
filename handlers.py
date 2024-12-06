@@ -309,7 +309,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             context.user_data['state'] = 'contact'
             buttons = [
                 [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
-                [InlineKeyboardButton("Telegram", url="https://t.me/kaliroom")],
+                [InlineKeyboardButton("Telegram", url="https://t.me/m/xpCumFdPYTBi")],
                 [InlineKeyboardButton("Показать номер", callback_data="show_phone_number")]
             ]
             await send_inline_message(update, context, MENU_TREE['contact']['message'], buttons)
@@ -427,7 +427,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user_state = context.user_data.get('state', 'main_menu')
 
     if query.data == "show_phone_number":
-        await query.message.reply_text("Ваш номер телефона: +79956124581")
+        await query.message.reply_text("Звоните по номеру: +79956124581")
         return
 
     if user_state == 'moderation_menu':
