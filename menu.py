@@ -30,6 +30,8 @@ MENU_TREE = {
         'options': ['Модерация'],
         'next_state': {
             'Модерация': 'moderation_menu',
+            'Аналитика📊': 'analytics_menu',
+
         }
     },
     'moderation_menu': {
