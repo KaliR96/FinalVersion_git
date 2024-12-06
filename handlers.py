@@ -426,10 +426,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     user_state = context.user_data.get('state', 'main_menu')
 
+    # Обработка нажатия кнопки "Показать номер телефона"
     if query.data == "show_phone_number":
+        logger.info(f"Пользователь {query.from_user.id} запросил номер телефона")
         await query.message.reply_text("Ваш номер телефона: +79956124581")
         return
-
     if user_state == 'moderation_menu':
         action, message_id = query.data.split('_')
         pending_reviews = context.application.bot_data.get('reviews', [])
