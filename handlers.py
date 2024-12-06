@@ -130,7 +130,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     menu = MENU_TREE.get(user_state)
     user_choice = update.message.text.strip() if update.message.text else None
 
-    if user_choice == 'Главное меню🔙':
+    # Обработка нажатия "Главное меню" из любого состояния
+    if user_choice == 'Главное меню':
         context.user_data['state'] = 'main_menu'
         menu = MENU_TREE['main_menu']
         await send_message(update, context, menu['message'], menu['options'])
@@ -356,7 +357,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         buttons = [
             [InlineKeyboardButton("WhatsApp", url="https://wa.me/79956124581")],
-            [InlineKeyboardButton("Telegram", url="https://t.me/kaliroom")],
+            [InlineKeyboardButton("Telegram", callback_data="send_telegram_link")],
             [InlineKeyboardButton("Показать номер", callback_data="show_phone_number")]
         ]
         await send_inline_message(update, context, MENU_TREE['contact']['message'], buttons)
@@ -426,8 +427,18 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     user_state = context.user_data.get('state', 'main_menu')
 
+    # Обработка нажатия кнопки "Telegram"
+    if query.data == "send_telegram_link":
+        logger.info(f"Пользователь {query.from_user.id} запросил Telegram ссылку")
+
+        # Отправляем сообщение с текстом ссылки в Telegram
+        send_telegram_link = "Ссылка на чат с нами: https://t.me/m/xpCumFdPYTBi"
+        await query.message.reply_text(send_telegram_link)
+        return
+
+
     if query.data == "show_phone_number":
-        await query.message.reply_text("Звоните по номеру: +79956124581")
+        await query.message.reply_text("Звони по номеру: +79956124581")
         return
 
     if user_state == 'moderation_menu':
