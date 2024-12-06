@@ -1,59 +1,38 @@
-import requests
-
-# Ваш Google Analytics Tracking ID и API секрет
-GA_MEASUREMENT_ID = 'G-WY3084MYCK'  # Уникальный идентификатор ресурса GA4
-API_SECRET = 'kLplxR5cRKuwGEy9_qj1KQ'  # Секретный ключ для Measurement Protocol
+from database import execute_query, fetch_all
+from datetime import datetime
 
 
-def send_event_to_ga(user_id, category, action, label, username=None):
+async def track_event(user_id, username, state, is_new):
+    # Сохраняем событие в базе данных
+    query = """
+    INSERT INTO user_analytics (user_id, username, state, is_new, event_time)
+    VALUES (%s, %s, %s, %s, %s);
     """
-    Отправляет событие в Google Analytics через Measurement Protocol API.
+    await execute_query(query, (user_id, username, state, is_new, datetime.now()))
 
-    Аргументы:
-    - user_id (int): Уникальный ID пользователя (например, update.effective_user.id из Telegram API).
-    - category (str): Категория события (например, "User").
-    - action (str): Действие, связанное с событием (например, "ButtonClick").
-    - label (str): Дополнительное описание события (например, "Button: ShowPhoneNumber").
-    - username (str, optional): Юзернейм пользователя Telegram (если доступен).
+async def get_summary_by_period(period: str):
+    # Получаем сводку по состояниям за указанный период
+    query = f"""
+    SELECT state, COUNT(*) AS count
+    FROM user_analytics
+    WHERE event_time > NOW() - INTERVAL '{period}'
+    GROUP BY state
+    ORDER BY count DESC;
     """
-    # Формируем тело запроса
-    data = {
-        'client_id': str(user_id),  # Уникальный идентификатор клиента
-        'user_properties': {  # Дополнительные свойства пользователя
-            'username': username or 'anonymous',  # Передаем юзернейм или 'anonymous', если юзернейм отсутствует
-            'platform': 'Telegram',  # Указываем, что данные с платформы Telegram
-        },
-        'events': [{
-            'name': 'page_view',  # Название события (например, просмотр страницы)
-            'params': {
-                'page_title': category,  # Категория события
-                'page_location': action,  # Действие, связанное с событием
-                'page_path': label  # Дополнительная информация о событии
-            }
-        }]
-    }
+    return await fetch_all(query)
 
-    # Формируем URL для отправки данных в Google Analytics
-    url = f'https://www.google-analytics.com/debug/mp/collect?measurement_id={GA_MEASUREMENT_ID}&api_secret={API_SECRET}'
+async def get_user_retention():
+    # Получаем сводку по возвращающимся пользователям
+    query = """
+    SELECT user_id, COUNT(*) AS visits, MAX(event_time) - MIN(event_time) AS duration
+    FROM user_analytics
+    GROUP BY user_id
+    HAVING visits > 1;
+    """
+    return await fetch_all(query)
 
+async def check_user_in_database(user_id):
+    query = "SELECT EXISTS(SELECT 1 FROM user_analytics WHERE user_id = ?);"
+    result = await execute_query(query, (user_id,))
+    return result[0][0] == 1
 
-    # Отправляем POST-запрос с данными
-    response = requests.post(url, json=data)
-
-    # Проверяем ответ от сервера Google Analytics
-    if response.status_code == 200:
-        print(f"Событие отправлено в Google Analytics: {response.status_code}")
-    else:
-        print(f"Ошибка отправки события: {response.status_code}, Ответ: {response.text}")
-
-
-# Пример использования функции send_event_to_ga
-if __name__ == "__main__":
-    # Пример отправки события:
-    user_id = 0  # Указываем 0 для событий, не связанных с конкретным пользователем
-    category = "Bot"  # Категория события
-    action = "Start"  # Действие события
-    label = "Bot started"  # Дополнительная информация о событии
-
-    # Отправляем событие в Google Analytics
-    send_event_to_ga(user_id, category, action, label)
